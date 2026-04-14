@@ -1,0 +1,32 @@
+# variables.corvo - Working with variables
+
+# Shared binary ops — output via @result (pass-by-reference)
+@arith_add = procedure(@a, @b, @result) {
+    @result = math.add(@a, @b)
+}
+@arith_mul = procedure(@a, @b, @result) {
+    @result = math.mul(@a, @b)
+}
+@arith_div = procedure(@a, @b, @result) {
+    @result = math.div(@a, @b)
+}
+
+@x = 10
+@y = 20
+@sum = 0
+@arith_add.call(@x, @y, @sum)
+sys.echo("${@x} + ${@y} = ${@sum}")
+
+@product = 0
+@arith_mul.call(@x, @y, @product)
+sys.echo("${@x} * ${@y} = ${@product}")
+
+@ratio = 0
+@arith_div.call(@y, @x, @ratio)
+sys.echo("${@y} / ${@x} = ${@ratio}")
+
+# String operations
+@greeting = string.concat("Hello, ", "World")
+sys.echo(@greeting)
+sys.echo("Uppercase: ${string.to_upper(@greeting)}")
+sys.echo("Length: ${string.len(@greeting)}")

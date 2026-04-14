@@ -1,0 +1,40 @@
+# loop.corvo - Loop with try/fallback
+
+@increment = procedure(@n) {
+    @n = math.add(@n, 1)
+}
+
+# Count from 1 to 5
+@counter = 0
+sys.echo("Counting from 1 to 5:")
+loop {
+    @increment.call(@counter)
+    sys.echo("  ${@counter}")
+    try {
+        assert_eq(@counter, 5)
+        terminate
+    } fallback {
+    }
+}
+
+sys.echo("Done!")
+
+# Accumulator pattern
+@section = procedure(@title) {
+    sys.echo("")
+    sys.echo(@title)
+}
+
+@section.call("Sum of 1 to 100:")
+@sum = 0
+@i = 1
+loop {
+    @sum = math.add(@sum, @i)
+    @increment.call(@i)
+    try {
+        assert_eq(@i, 101)
+        terminate
+    } fallback {
+    }
+}
+sys.echo("Result: ${@sum}")

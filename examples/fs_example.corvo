@@ -1,0 +1,68 @@
+# fs_example.corvo - All fs.* (file system) functions
+
+@tmp = "/tmp/corvo_fs_demo"
+
+@section = procedure(@title) {
+    sys.echo("")
+    sys.echo(@title)
+}
+
+# fs.mkdir - create a directory (try/fallback handles the case where it already exists)
+sys.echo("=== fs.mkdir ===")
+try {
+    fs.mkdir(@tmp)
+} fallback {}
+sys.echo("Directory ready: ${@tmp}")
+
+@section.call("=== fs.exists ===")
+sys.echo("Directory exists: ${fs.exists(@tmp)}")
+sys.echo("Nonexistent exists: ${fs.exists("/tmp/no_such_path_xyz")}")
+
+@section.call("=== fs.write ===")
+@file = string.concat(@tmp, "/hello.txt")
+fs.write(@file, "Hello, Corvo!\n")
+sys.echo("Wrote to: ${@file}")
+
+@section.call("=== fs.read ===")
+@contents = fs.read(@file)
+sys.echo("Read: ${@contents}")
+
+@section.call("=== fs.append ===")
+fs.append(@file, "Second line\n")
+@contents2 = fs.read(@file)
+sys.echo("After append:")
+sys.echo(@contents2)
+
+@section.call("=== fs.stat ===")
+@info = fs.stat(@file)
+sys.echo("is_dir: ${map.get(@info, "is_dir")}")
+sys.echo("size (bytes): ${map.get(@info, "size")}")
+sys.echo("permissions: ${map.get(@info, "permissions")}")
+sys.echo("modified_at: ${map.get(@info, "modified_at")}")
+
+@section.call("=== fs.copy ===")
+@copy_path = string.concat(@tmp, "/hello_copy.txt")
+fs.copy(@file, @copy_path)
+sys.echo("Copied to: ${@copy_path}")
+sys.echo("Copy exists: ${fs.exists(@copy_path)}")
+
+@section.call("=== fs.move ===")
+@moved_path = string.concat(@tmp, "/hello_moved.txt")
+fs.move(@copy_path, @moved_path)
+sys.echo("Moved to: ${@moved_path}")
+sys.echo("Original gone: ${fs.exists(@copy_path)}")
+sys.echo("Moved exists: ${fs.exists(@moved_path)}")
+
+@section.call("=== fs.list_dir ===")
+@entries = fs.list_dir(@tmp)
+sys.echo("Directory entries:")
+browse(@entries, @idx, @entry) {
+    sys.echo("  ${@entry}")
+}
+
+@section.call("=== fs.delete ===")
+fs.delete(@file)
+sys.echo("Deleted file. Still exists: ${fs.exists(@file)}")
+fs.delete(@moved_path)
+fs.delete(@tmp)
+sys.echo("Deleted directory. Still exists: ${fs.exists(@tmp)}")

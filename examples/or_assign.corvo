@@ -1,0 +1,16 @@
+# or= operator: assign the first truthy value from a candidate list.
+# Candidates are evaluated left to right; the first truthy one wins.
+# If a candidate raises an error (e.g. missing map key) it is skipped.
+
+# Basic usage: picks the first truthy value.
+@result or= (false, false, false, true)
+sys.echo(@result)   # true
+
+# String fallback: skips empty string and zero, picks "hello".
+@greeting or= (0, "", "hello")
+sys.echo(@greeting)   # hello
+
+# Map fallback: skips a missing key (which would cause an error) and falls back to default.
+@config = map.new()
+@host or= (@config["host"], "localhost")
+sys.echo(@host)   # localhost

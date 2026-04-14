@@ -1,0 +1,43 @@
+# math_example.corvo - All math.* functions
+
+@section = procedure(@title) {
+    sys.echo("")
+    sys.echo(@title)
+}
+
+sys.echo("=== math.add ===")
+@sum = math.add(10, 5)
+sys.echo("10 + 5 = ${@sum}")
+
+@section.call("=== math.sub ===")
+@diff = math.sub(10, 5)
+sys.echo("10 - 5 = ${@diff}")
+
+@section.call("=== math.mul ===")
+@product = math.mul(10, 5)
+sys.echo("10 * 5 = ${@product}")
+
+@section.call("=== math.div ===")
+@quotient = math.div(10, 5)
+sys.echo("10 / 5 = ${@quotient}")
+
+# Division by zero is caught by fallback
+try {
+    @bad = math.div(10, 0)
+} fallback {
+    sys.echo("math.div by zero raises an error (caught by fallback)")
+}
+
+@section.call("=== math.mod ===")
+@remainder = math.mod(10, 3)
+sys.echo("10 mod 3 = ${@remainder}")
+
+@even_check = math.mod(8, 2)
+sys.echo("8 mod 2 = ${@even_check} (0 means even)")
+
+# Modulo by zero is also an error
+try {
+    @bad_mod = math.mod(10, 0)
+} fallback {
+    sys.echo("math.mod by zero raises an error (caught by fallback)")
+}

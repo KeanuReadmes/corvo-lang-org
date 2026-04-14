@@ -1,0 +1,50 @@
+# error_handling.corvo - try/fallback patterns
+
+@section = procedure(@title) {
+    sys.echo("")
+    sys.echo(@title)
+}
+
+sys.echo("=== Error Handling ===")
+
+# Simple try/fallback
+@result = "init"
+try {
+    assert_eq(1, 1)
+    @result = "assertion passed"
+} fallback {
+    @result = "assertion failed"
+}
+sys.echo("Simple try: ${@result}")
+
+# Failed assertion triggers fallback
+try {
+    assert_eq(1, 2)
+    @result = "should not reach"
+} fallback {
+    @result = "correctly caught error"
+}
+sys.echo("Failed try: ${@result}")
+
+# Multiple fallbacks
+@section.call("=== Multiple Fallbacks ===")
+@step = 0
+try {
+    @step = math.add(@step, 1)
+    assert_eq(1, 2)
+} fallback {
+    @step = math.add(@step, 1)
+    assert_eq(3, 4)
+} fallback {
+    @step = math.add(@step, 1)
+    sys.echo("Third fallback executed, step=${@step}")
+}
+
+@section.call("=== Safe Access ===")
+@config = {"host": "localhost", "port": 8080}
+try {
+    @timeout = map.get(@config, "timeout")
+    sys.echo("Timeout: ${@timeout}")
+} fallback {
+    sys.echo("Timeout not configured, using default")
+}

@@ -1,0 +1,26 @@
+# json_example.corvo - JSON parsing and manipulation
+
+@section = procedure(@title) {
+    sys.echo("")
+    sys.echo(@title)
+}
+
+sys.echo("=== JSON Example ===")
+
+# Parse JSON string
+@json_str = "{\"name\": \"Corvo\", \"version\": \"0.1.0\", \"features\": [\"lexer\", \"parser\", \"evaluator\"]}"
+@data = json.parse(@json_str)
+
+sys.echo("Name: ${map.get(@data, "name")}")
+sys.echo("Version: ${map.get(@data, "version")}")
+
+# Access nested list
+@features = map.get(@data, "features")
+sys.echo("Features: ${list.join(@features, ", ")}")
+sys.echo("Feature count: ${list.len(@features)}")
+
+# Add data and re-serialize
+@data = map.set(@data, "language", "Rust")
+@output = json.stringify(@data)
+@section.call("Re-serialized")
+sys.echo(@output)

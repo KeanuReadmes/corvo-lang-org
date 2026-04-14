@@ -1,0 +1,67 @@
+# map_methods.corvo - All map.* type methods
+
+@person = {"name": "Alice", "age": 30, "city": "Tokyo"}
+
+@section = procedure(@title) {
+    sys.echo("")
+    sys.echo(@title)
+}
+
+sys.echo("=== map.len ===")
+sys.echo("Number of keys: ${map.len(@person)}")
+
+@section.call("=== map.is_empty ===")
+sys.echo("Is person empty: ${map.is_empty(@person)}")
+sys.echo("Is {} empty: ${map.is_empty({})}")
+
+@section.call("=== map.has_key / map.has ===")
+sys.echo("Has 'name': ${map.has_key(@person, "name")}")
+sys.echo("Has 'email': ${map.has_key(@person, "email")}")
+sys.echo("has alias: ${map.has(@person, "name")}")
+
+@section.call("=== map.get ===")
+sys.echo("name: ${map.get(@person, "name")}")
+sys.echo("age:  ${map.get(@person, "age")}")
+
+# map.get with a default value
+sys.echo("email (default): ${map.get(@person, "email", "not set")}")
+
+@section.call("=== map.keys ===")
+@keys = map.keys(@person)
+sys.echo("Keys: ${list.join(@keys, ", ")}")
+
+@section.call("=== map.values ===")
+@vals = map.values(@person)
+sys.echo("Values: ${list.join(@vals, ", ")}")
+
+@section.call("=== map.entries ===")
+@entries = map.entries(@person)
+sys.echo("Entry count: ${list.len(@entries)}")
+
+@section.call("=== map.set ===")
+@person = map.set(@person, "email", "alice@example.com")
+sys.echo("After set 'email': ${map.get(@person, "email")}")
+
+@section.call("=== .set shorthand (mutates variable in place) ===")
+@person.set("phone", "555-1234")
+sys.echo("After .set 'phone': ${@person.get("phone")}")
+
+@section.call("=== .get shorthand ===")
+sys.echo("name via .get: ${@person.get("name")}")
+sys.echo("missing via .get with default: ${@person.get("missing", "n/a")}")
+
+@section.call("=== @var[key] = val (index shorthand) ===")
+@person["city"] = "Osaka"
+sys.echo("city after shorthand set: ${@person["city"]}")
+
+@section.call("=== map.remove / map.delete ===")
+@person = map.remove(@person, "city")
+sys.echo("After remove 'city'. Has 'city': ${map.has_key(@person, "city")}")
+@person = map.delete(@person, "email")
+sys.echo("After delete 'email'. Has 'email': ${map.has_key(@person, "email")}")
+
+@section.call("=== map.merge ===")
+@extra = {"country": "Japan", "age": 31}
+@merged = map.merge(@person, @extra)
+sys.echo("Merged age (overwritten): ${map.get(@merged, "age")}")
+sys.echo("Merged country: ${map.get(@merged, "country")}")

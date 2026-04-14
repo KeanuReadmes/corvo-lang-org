@@ -1,0 +1,36 @@
+# sys_example.corvo - System I/O functions
+
+@section = procedure(@title) {
+    sys.echo("")
+    sys.echo(@title)
+}
+
+sys.echo("=== sys.echo ===")
+sys.echo("Hello from sys.echo!")
+sys.echo("Supports string interpolation: ${string.concat("foo", "bar")}")
+
+@section.call("=== sys.sleep ===")
+sys.echo("Sleeping for 100ms...")
+sys.sleep(100)
+sys.echo("Awake!")
+
+@section.call("=== sys.exec ===")
+@result = sys.exec(["echo", "hello from sys.exec"])
+sys.echo("stdout: ${map.get(@result, "stdout")}")
+sys.echo("exit code: ${map.get(@result, "code")}")
+
+@ls_result = sys.exec(["ls", "-1", "/tmp"])
+sys.echo("exit code from ls: ${map.get(@ls_result, "code")}")
+
+@section.call("=== sys.panic ===")
+try {
+    sys.panic("something went wrong")
+} fallback {
+    sys.echo("sys.panic triggered the fallback as expected")
+}
+
+# sys.read_line - read a line from stdin (interactive; skipped in this demo)
+# @input = sys.read_line("Enter your name: ")
+# sys.echo("You typed: ${@input}")
+@section.call("=== sys.read_line ===")
+sys.echo("(sys.read_line requires interactive input — see comment above)")

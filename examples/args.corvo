@@ -1,0 +1,39 @@
+# args.corvo — script arguments (os.argv + args.parse / args.scan)
+#
+# Run with extra tokens after the script path:
+#   corvo examples/args.corvo hello --verbose --out=tmp.txt
+#
+# args.scan is a zero-config wrapper around args.parse. In zero-config mode,
+# long options are boolean flags; use args.parse with long_values to consume
+# the next token as a value. Use aliases and accumulate for richer parsing.
+
+@dump_positionals = procedure(@positional) {
+    sys.echo("positionals (${list.len(@positional)}):")
+    browse(@positional, @_i, @p) {
+        sys.echo("  - ${@p}")
+    }
+}
+
+@argv = os.argv()
+sys.echo("argc (script args): ${list.len(@argv)}")
+
+# --- zero-config scan (backward-compatible) ---
+@parsed = args.scan(@argv)
+@positional = map.get(@parsed, "positional")
+@options = map.get(@parsed, "options")
+
+@dump_positionals.call(@positional)
+
+sys.echo("options (sample):")
+sys.echo("  verbose: ${map.get(@options, "verbose", false)}")
+sys.echo("  out:     ${map.get(@options, "out", "")}")
+
+# --- args.parse with a simple config ---
+@spec = {
+  "aliases": { "v": "verbose", "o": "output" },
+  "short_values": ["o"],
+  "long_values": ["output"]
+}
+@p2 = args.parse(@argv, @spec)
+sys.echo("verbose (via alias): ${map.get(map.get(@p2, "options"), "verbose", false)}")
+sys.echo("output  (via -o/--output): ${map.get(map.get(@p2, "options"), "output", "")}")

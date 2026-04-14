@@ -1,0 +1,25 @@
+# xml_example.corvo - xml.parse
+
+@section = procedure(@title) {
+    sys.echo("")
+    sys.echo(@title)
+}
+
+sys.echo("=== xml.parse ===")
+@xml_str = "<person><name>Alice</name><age>30</age><city>Tokyo</city></person>"
+@data = xml.parse(@xml_str)
+
+# Each child element is a map with a "$text" key for its text content
+sys.echo("Top-level keys: ${list.join(map.keys(@data), ", ")}")
+
+@name_val = map.get(map.get(@data, "name"), "$text")
+@age_val  = map.get(map.get(@data, "age"),  "$text")
+@city_val = map.get(map.get(@data, "city"), "$text")
+
+sys.echo("name: ${@name_val}")
+sys.echo("age:  ${@age_val}")
+sys.echo("city: ${@city_val}")
+
+# Inspect the full structure as JSON
+@section.call("Full structure (JSON)")
+sys.echo(json.stringify(@data))

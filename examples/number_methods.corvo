@@ -1,0 +1,60 @@
+# number_methods.corvo - All number.* type methods
+
+@section = procedure(@title) {
+    sys.echo("")
+    sys.echo(@title)
+}
+
+sys.echo("=== number.to_string ===")
+@n = 42
+@as_str = number.to_string(@n)
+sys.echo("42 as string: '${@as_str}'")
+sys.echo("Type check — concat works: ${string.concat("value=", @as_str)}")
+
+@section.call("=== number.parse ===")
+@parsed = number.parse(0, "3.14")
+sys.echo("Parsed '3.14': ${@parsed}")
+
+try {
+    @bad_parse = number.parse(0, "not-a-number")
+} fallback {
+    sys.echo("number.parse of 'not-a-number' raised an error (caught)")
+}
+
+@section.call("=== number.abs ===")
+@neg = math.sub(0, 7)
+sys.echo("abs(-7): ${number.abs(@neg)}")
+sys.echo("abs(7):  ${number.abs(7)}")
+
+@section.call("=== number.floor ===")
+@neg_small = math.sub(0, 3.1)
+sys.echo("floor(3.9): ${number.floor(3.9)}")
+sys.echo("floor(-3.1): ${number.floor(@neg_small)}")
+
+@section.call("=== number.ceil ===")
+@neg_large = math.sub(0, 3.9)
+sys.echo("ceil(3.1): ${number.ceil(3.1)}")
+sys.echo("ceil(-3.9): ${number.ceil(@neg_large)}")
+
+@section.call("=== number.round ===")
+sys.echo("round(3.5): ${number.round(3.5)}")
+sys.echo("round(3.4): ${number.round(3.4)}")
+
+@section.call("=== number.sqrt ===")
+sys.echo("sqrt(9):  ${number.sqrt(9)}")
+sys.echo("sqrt(2):  ${number.sqrt(2)}")
+
+try {
+    @bad_sqrt = number.sqrt(math.sub(0, 1))
+} fallback {
+    sys.echo("sqrt(-1) raises an error (caught)")
+}
+
+@section.call("=== number.is_nan ===")
+sys.echo("is_nan(0):   ${number.is_nan(0)}")
+
+@section.call("=== number.is_finite ===")
+sys.echo("is_finite(42): ${number.is_finite(42)}")
+
+@section.call("=== number.is_infinite ===")
+sys.echo("is_infinite(42): ${number.is_infinite(42)}")
