@@ -343,6 +343,8 @@ pub const KNOWN_FUNCTIONS: &[&str] = &[
     "os.uptime",
     "os.load_average",
     "os.user_count",
+    "os.user_id",
+    "os.group_id",
     // math
     "math.add",
     "math.sub",
@@ -367,6 +369,10 @@ pub const KNOWN_FUNCTIONS: &[&str] = &[
     "fs.read_meta",
     "fs.path_parent",
     "fs.path_relative",
+    "fs.chmod",
+    "fs.chown",
+    "fs.selinux_context_get",
+    "fs.selinux_context_set",
     // http
     "http.get",
     "http.post",

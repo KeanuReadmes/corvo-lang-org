@@ -67,7 +67,8 @@ try {
 @_wrap_print = procedure(@_wp_s, @_wp_cols) {
   try {
     assert_eq(@_wp_cols, 0)
-    sys.echo(@_wp_s)
+    # GNU prints a single line with no trailing newline when wrap is disabled.
+    sys.print(@_wp_s)
   } fallback {
     @_wp_rem = @_wp_s
     loop {

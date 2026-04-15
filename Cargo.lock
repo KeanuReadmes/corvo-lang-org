@@ -338,6 +338,7 @@ dependencies = [
  "hmac",
  "hostname",
  "lettre",
+ "libc",
  "md-5",
  "miette",
  "pretty_assertions",

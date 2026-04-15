@@ -49,6 +49,14 @@ cd /fixtures
 . "$TESTS_DIR/matrix/basenc.sh"
 # shellcheck source=cksum.sh
 . "$TESTS_DIR/matrix/cksum.sh"
+# shellcheck source=chmod.sh
+. "$TESTS_DIR/matrix/chmod.sh"
+# shellcheck source=chown.sh
+. "$TESTS_DIR/matrix/chown.sh"
+# shellcheck source=chgrp.sh
+. "$TESTS_DIR/matrix/chgrp.sh"
+# shellcheck source=chcon.sh
+. "$TESTS_DIR/matrix/chcon.sh"
 
 echo ""
 echo "======================================================"

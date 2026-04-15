@@ -5,7 +5,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 #[cfg(unix)]
-use std::os::unix::fs::{FileTypeExt, MetadataExt};
+use std::os::unix::fs::{chown as unix_chown, lchown, FileTypeExt, MetadataExt, PermissionsExt};
+
+#[cfg(target_os = "linux")]
+use libc;
 
 pub fn read(args: &[Value], _named_args: &HashMap<String, Value>) -> CorvoResult<Value> {
     let path = args
@@ -678,6 +681,401 @@ fn unix_mode_string(meta: &fs::Metadata, ft: &fs::FileType) -> String {
     s
 }
 
+// ---------------------------------------------------------------------------
+// chmod / chown / SELinux file context (Linux xattr)
+// ---------------------------------------------------------------------------
+
+#[cfg(unix)]
+fn who_clear_mask(who: u8) -> u32 {
+    let mut m = 0u32;
+    if who & 1 != 0 {
+        m |= 0o4700;
+    }
+    if who & 2 != 0 {
+        m |= 0o2070;
+    }
+    if who & 4 != 0 {
+        m |= 0o1007;
+    }
+    m
+}
+
+#[cfg(unix)]
+fn parse_perm_bits(who: u8, perm: &str, cur: u32, is_dir: bool) -> CorvoResult<u32> {
+    let mut r = false;
+    let mut w = false;
+    let mut x = false;
+    let mut cap_x = false;
+    let mut s = false;
+    let mut t = false;
+    for c in perm.chars() {
+        match c {
+            'r' => r = true,
+            'w' => w = true,
+            'x' => x = true,
+            'X' => cap_x = true,
+            's' => s = true,
+            't' => t = true,
+            _ => {
+                return Err(CorvoError::invalid_argument(format!(
+                    "fs.chmod: invalid permission character '{c}'"
+                )));
+            }
+        }
+    }
+    let any_exec = is_dir || (cur & 0o111) != 0;
+    let x_eff = x || (cap_x && any_exec);
+    let mut bits = 0u32;
+    if who & 1 != 0 {
+        if r {
+            bits |= 0o400;
+        }
+        if w {
+            bits |= 0o200;
+        }
+        if x_eff {
+            bits |= 0o100;
+        }
+        if s {
+            bits |= 0o4000;
+        }
+    }
+    if who & 2 != 0 {
+        if r {
+            bits |= 0o040;
+        }
+        if w {
+            bits |= 0o020;
+        }
+        if x_eff {
+            bits |= 0o010;
+        }
+        if s {
+            bits |= 0o2000;
+        }
+    }
+    if who & 4 != 0 {
+        if r {
+            bits |= 0o004;
+        }
+        if w {
+            bits |= 0o002;
+        }
+        if x_eff {
+            bits |= 0o001;
+        }
+        if t {
+            bits |= 0o1000;
+        }
+    }
+    Ok(bits)
+}
+
+#[cfg(unix)]
+fn apply_chmod_clause(mode: u32, is_dir: bool, clause: &str) -> CorvoResult<u32> {
+    let bytes = clause.as_bytes();
+    let mut i = 0usize;
+    let mut who = 0u8;
+    if i < bytes.len() && matches!(bytes[i], b'+' | b'-' | b'=') {
+        who = 7;
+    } else {
+        while i < bytes.len() {
+            match bytes[i] {
+                b'u' => who |= 1,
+                b'g' => who |= 2,
+                b'o' => who |= 4,
+                b'a' => who |= 7,
+                b'+' | b'-' | b'=' => break,
+                _ => {
+                    return Err(CorvoError::invalid_argument(format!(
+                        "fs.chmod: invalid symbolic clause '{clause}'"
+                    )));
+                }
+            }
+            i += 1;
+        }
+        if who == 0 {
+            who = 7;
+        }
+    }
+    if i >= bytes.len() {
+        return Err(CorvoError::invalid_argument(
+            "fs.chmod: symbolic clause missing operator",
+        ));
+    }
+    let op = bytes[i];
+    i += 1;
+    let perm_str = std::str::from_utf8(&bytes[i..])
+        .map_err(|_| CorvoError::invalid_argument("fs.chmod: invalid UTF-8 in symbolic mode"))?;
+    let perm_bits = parse_perm_bits(who, perm_str, mode, is_dir)?;
+    let clear = who_clear_mask(who);
+    let touch = clear;
+    Ok(match op {
+        b'+' => mode | (perm_bits & touch),
+        b'-' => mode & !(perm_bits & touch),
+        b'=' => (mode & !clear) | perm_bits,
+        _ => {
+            return Err(CorvoError::invalid_argument(
+                "fs.chmod: expected '+', '-', or '=' in symbolic mode",
+            ));
+        }
+    })
+}
+
+#[cfg(unix)]
+fn chmod_apply_mode(path: &Path, mode: u32) -> CorvoResult<()> {
+    let mut perms = fs::symlink_metadata(path)
+        .map_err(|e| CorvoError::file_system(e.to_string()))?
+        .permissions();
+    perms.set_mode(mode & 0o7777);
+    fs::set_permissions(path, perms).map_err(|e| CorvoError::file_system(e.to_string()))?;
+    Ok(())
+}
+
+#[cfg(unix)]
+fn chmod_apply_spec(path: &Path, spec: &str) -> CorvoResult<()> {
+    let spec = spec.trim();
+    if spec.is_empty() {
+        return Err(CorvoError::invalid_argument("fs.chmod: empty MODE"));
+    }
+    if spec.chars().all(|c| matches!(c, '0'..='7')) {
+        let mode = u32::from_str_radix(spec, 8).map_err(|_| {
+            CorvoError::invalid_argument(format!("fs.chmod: invalid octal mode '{spec}'"))
+        })?;
+        chmod_apply_mode(path, mode)?;
+        return Ok(());
+    }
+    let meta = fs::symlink_metadata(path).map_err(|e| CorvoError::file_system(e.to_string()))?;
+    let mut mode = meta.mode() & 0o7777;
+    let is_dir = meta.is_dir();
+    for clause in spec.split(',') {
+        let clause = clause.trim();
+        if clause.is_empty() {
+            continue;
+        }
+        mode = apply_chmod_clause(mode, is_dir, clause)?;
+    }
+    chmod_apply_mode(path, mode)?;
+    Ok(())
+}
+
+#[cfg(unix)]
+fn chmod_visit(path: &Path, spec_or_mode: &ChmodArg<'_>) -> CorvoResult<()> {
+    match spec_or_mode {
+        ChmodArg::Numeric(m) => chmod_apply_mode(path, *m)?,
+        ChmodArg::Symbolic(s) => chmod_apply_spec(path, s)?,
+    }
+    if path.is_dir() {
+        let rd = fs::read_dir(path).map_err(|e| CorvoError::file_system(e.to_string()))?;
+        for ent in rd {
+            let ent = ent.map_err(|e| CorvoError::file_system(e.to_string()))?;
+            chmod_visit(&ent.path(), spec_or_mode)?;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+enum ChmodArg<'a> {
+    Numeric(u32),
+    Symbolic(&'a str),
+}
+
+/// Change file mode bits. `mode` is either a numeric value (same encoding as `st_mode & 07777`)
+/// or an octal / symbolic MODE string (e.g. `"755"`, `"u+x"`).
+///
+/// Args: `path`, `mode` (number or string), `recursive` (bool, default false).
+pub fn chmod(args: &[Value], _named_args: &HashMap<String, Value>) -> CorvoResult<Value> {
+    #[cfg(not(unix))]
+    {
+        let _ = args;
+        return Err(CorvoError::runtime("fs.chmod is only supported on Unix"));
+    }
+    #[cfg(unix)]
+    {
+        let path = args
+            .first()
+            .and_then(|v| v.as_string())
+            .ok_or_else(|| CorvoError::invalid_argument("fs.chmod requires a path"))?;
+        let mode_val = args.get(1).ok_or_else(|| {
+            CorvoError::invalid_argument("fs.chmod requires a mode (number or string)")
+        })?;
+        let recursive = args.get(2).and_then(|v| v.as_bool()).unwrap_or(false);
+        let p = Path::new(path.as_str());
+        match mode_val {
+            Value::Number(n) => {
+                let m = *n as u32;
+                if recursive {
+                    chmod_visit(p, &ChmodArg::Numeric(m))?;
+                } else {
+                    chmod_apply_mode(p, m)?;
+                }
+            }
+            Value::String(s) => {
+                if recursive {
+                    chmod_visit(p, &ChmodArg::Symbolic(s.as_str()))?;
+                } else {
+                    chmod_apply_spec(p, s.as_str())?;
+                }
+            }
+            _ => {
+                return Err(CorvoError::invalid_argument(
+                    "fs.chmod: mode must be a number or string",
+                ));
+            }
+        }
+        Ok(Value::Boolean(true))
+    }
+}
+
+/// Change owner and group. Use uid or gid `-1` (number) to leave that id unchanged.
+///
+/// Args: `path`, `uid`, `gid`, `follow_symlinks` (bool, default true).
+pub fn chown(args: &[Value], _named_args: &HashMap<String, Value>) -> CorvoResult<Value> {
+    #[cfg(not(unix))]
+    {
+        let _ = args;
+        return Err(CorvoError::runtime("fs.chown is only supported on Unix"));
+    }
+    #[cfg(unix)]
+    {
+        let path = args
+            .first()
+            .and_then(|v| v.as_string())
+            .ok_or_else(|| CorvoError::invalid_argument("fs.chown requires a path"))?;
+        let uid_v = args
+            .get(1)
+            .and_then(|v| v.as_number())
+            .ok_or_else(|| CorvoError::invalid_argument("fs.chown requires uid (number)"))?;
+        let gid_v = args
+            .get(2)
+            .and_then(|v| v.as_number())
+            .ok_or_else(|| CorvoError::invalid_argument("fs.chown requires gid (number)"))?;
+        let follow = args.get(3).and_then(|v| v.as_bool()).unwrap_or(true);
+        let uid = if uid_v < 0.0 {
+            None
+        } else {
+            Some(uid_v as u32)
+        };
+        let gid = if gid_v < 0.0 {
+            None
+        } else {
+            Some(gid_v as u32)
+        };
+        let p = Path::new(path.as_str());
+        let r = if follow {
+            unix_chown(p, uid, gid)
+        } else {
+            lchown(p, uid, gid)
+        };
+        r.map_err(|e| CorvoError::file_system(e.to_string()))?;
+        Ok(Value::Boolean(true))
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub fn selinux_context_get(
+    args: &[Value],
+    _named_args: &HashMap<String, Value>,
+) -> CorvoResult<Value> {
+    use std::ffi::CString;
+
+    let path = args
+        .first()
+        .and_then(|v| v.as_string())
+        .ok_or_else(|| CorvoError::invalid_argument("fs.selinux_context_get requires a path"))?;
+    let cpath = CString::new(path.as_str())
+        .map_err(|_| CorvoError::invalid_argument("fs.selinux_context_get: path contains NUL"))?;
+    let cname = CString::new("security.selinux").unwrap();
+    // SAFETY: libc getxattr with valid C strings.
+    let sz = unsafe { libc::getxattr(cpath.as_ptr(), cname.as_ptr(), std::ptr::null_mut(), 0) };
+    if sz < 0 {
+        return Err(CorvoError::file_system(
+            std::io::Error::last_os_error().to_string(),
+        ));
+    }
+    let mut buf = vec![0u8; sz as usize];
+    let sz2 = unsafe {
+        libc::getxattr(
+            cpath.as_ptr(),
+            cname.as_ptr(),
+            buf.as_mut_ptr().cast::<libc::c_void>(),
+            buf.len(),
+        )
+    };
+    if sz2 < 0 {
+        return Err(CorvoError::file_system(
+            std::io::Error::last_os_error().to_string(),
+        ));
+    }
+    while buf.last().copied() == Some(0) {
+        buf.pop();
+    }
+    let s = String::from_utf8_lossy(&buf).to_string();
+    Ok(Value::String(s))
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn selinux_context_get(
+    args: &[Value],
+    _named_args: &HashMap<String, Value>,
+) -> CorvoResult<Value> {
+    let _ = args;
+    Err(CorvoError::runtime(
+        "fs.selinux_context_get is only supported on Linux",
+    ))
+}
+
+#[cfg(target_os = "linux")]
+pub fn selinux_context_set(
+    args: &[Value],
+    _named_args: &HashMap<String, Value>,
+) -> CorvoResult<Value> {
+    use std::ffi::CString;
+
+    let path = args
+        .first()
+        .and_then(|v| v.as_string())
+        .ok_or_else(|| CorvoError::invalid_argument("fs.selinux_context_set requires a path"))?;
+    let ctx = args
+        .get(1)
+        .and_then(|v| v.as_string())
+        .ok_or_else(|| CorvoError::invalid_argument("fs.selinux_context_set requires context"))?;
+    let cpath = CString::new(path.as_str())
+        .map_err(|_| CorvoError::invalid_argument("fs.selinux_context_set: path contains NUL"))?;
+    let cname = CString::new("security.selinux").unwrap();
+    let mut val = ctx.as_bytes().to_vec();
+    if !val.ends_with(&[0]) {
+        val.push(0);
+    }
+    let r = unsafe {
+        libc::setxattr(
+            cpath.as_ptr(),
+            cname.as_ptr(),
+            val.as_ptr().cast::<libc::c_void>(),
+            val.len(),
+            0,
+        )
+    };
+    if r != 0 {
+        return Err(CorvoError::file_system(
+            std::io::Error::last_os_error().to_string(),
+        ));
+    }
+    Ok(Value::Boolean(true))
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn selinux_context_set(
+    args: &[Value],
+    _named_args: &HashMap<String, Value>,
+) -> CorvoResult<Value> {
+    let _ = args;
+    Err(CorvoError::runtime(
+        "fs.selinux_context_set is only supported on Linux",
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -785,5 +1183,40 @@ mod tests {
             path_parent(&args, &empty_args()).unwrap(),
             Value::String(expected)
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_chmod_octal_and_symbolic() {
+        let file = std::env::temp_dir().join("corvo_test_chmod_file");
+        let path = file.to_string_lossy().to_string();
+        let _ = fs::remove_file(&path);
+        fs::write(&path, b"x").unwrap();
+
+        let chmod_args = vec![
+            Value::String(path.clone()),
+            Value::String("600".to_string()),
+            Value::Boolean(false),
+        ];
+        assert_eq!(
+            chmod(&chmod_args, &empty_args()).unwrap(),
+            Value::Boolean(true)
+        );
+        let mode = fs::symlink_metadata(&path).unwrap().mode() & 0o7777;
+        assert_eq!(mode, 0o600);
+
+        let chmod_sym = vec![
+            Value::String(path.clone()),
+            Value::String("u+x".to_string()),
+            Value::Boolean(false),
+        ];
+        assert_eq!(
+            chmod(&chmod_sym, &empty_args()).unwrap(),
+            Value::Boolean(true)
+        );
+        let mode2 = fs::symlink_metadata(&path).unwrap().mode() & 0o7777;
+        assert_eq!(mode2, 0o700);
+
+        let _ = fs::remove_file(&path);
     }
 }

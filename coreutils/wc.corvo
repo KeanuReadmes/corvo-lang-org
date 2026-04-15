@@ -152,40 +152,175 @@ try {
   }
 }
 
-# -- Procedure: format output line ---------------------------------------------
-@_format_output = procedure(@stats, @filename, @show_l, @show_w, @show_c, @show_b, @show_L, @output_out) {
-  @_parts = list.new()
+# -- GNU number_width: one field width for all counts; from sum of regular file sizes
+# (see coreutils wc.c compute_number_width). Single file + single metric =>1.
+@_wc_compute_number_width = procedure(@argv_files, @show_l, @show_w, @show_c, @show_b, @show_L, @nw_out) {
+  @nprint = 0
+  try {
+    assert_eq(@show_l, true)
+    @nprint = math.add(@nprint, 1)
+  } fallback {}
+  try {
+    assert_eq(@show_w, true)
+    @nprint = math.add(@nprint, 1)
+  } fallback {}
+  try {
+    assert_eq(@show_c, true)
+    @nprint = math.add(@nprint, 1)
+  } fallback {}
+  try {
+    assert_eq(@show_b, true)
+    @nprint = math.add(@nprint, 1)
+  } fallback {}
+  try {
+    assert_eq(@show_L, true)
+    @nprint = math.add(@nprint, 1)
+  } fallback {}
+
+  @paths = @argv_files
+  try {
+    assert_eq(list.len(@paths), 0)
+    @paths = list.new()
+    @paths = list.push(@paths, "-")
+  } fallback {}
+
+  try {
+    assert_eq(list.len(@paths), 1)
+    assert_eq(@nprint, 1)
+    @nw_out = 1
+  } fallback {
+    @min_w = 1
+    @reg_total = 0
+    browse(@paths, @_pi, @_fn) {
+      @_stat_path = @_fn
+      try {
+        assert_eq(@_stat_path, "-")
+        @_stat_path = "/dev/stdin"
+      } fallback {}
+      try {
+        @st = fs.stat(@_stat_path)
+        try {
+          assert_eq(map.get(@st, "is_dir", false), true)
+          @min_w = 7
+        } fallback {
+          @reg_total = math.add(@reg_total, map.get(@st, "size", 0))
+        }
+      } fallback {}
+    }
+    @nw_out = 1
+    @rt = @reg_total
+    loop {
+      try {
+        assert_lt(@rt, 10)
+        terminate
+      } fallback {}
+      @nw_out = math.add(@nw_out, 1)
+      @rt = number.floor(math.div(@rt, 10))
+    }
+    try {
+      assert_lt(@nw_out, @min_w)
+      @nw_out = @min_w
+    } fallback {}
+  }
+}
+
+# First count uses "%*s"; following counts use " %*s" (GNU write_counts).
+@_wc_format_line = procedure(@stats, @filename, @show_l, @show_w, @show_c, @show_b, @show_L, @nw, @line_out) {
+  @line_out = ""
+  @first = true
 
   try {
     assert_eq(@show_l, true)
-    @_parts = list.push(@_parts, string.pad_start(number.to_string(@stats["lines"]), 7, " "))
+    @p = string.pad_start(number.to_string(map.get(@stats, "lines", 0)), @nw, " ")
+    try {
+      assert_eq(@first, true)
+      @line_out = string.concat(@line_out, @p)
+      @first = false
+    } fallback {
+      @line_out = string.concat(@line_out, " ")
+      @line_out = string.concat(@line_out, @p)
+    }
   } fallback {}
 
   try {
     assert_eq(@show_w, true)
-    @_parts = list.push(@_parts, string.pad_start(number.to_string(@stats["words"]), 7, " "))
+    @p = string.pad_start(number.to_string(map.get(@stats, "words", 0)), @nw, " ")
+    try {
+      assert_eq(@first, true)
+      @line_out = string.concat(@line_out, @p)
+      @first = false
+    } fallback {
+      @line_out = string.concat(@line_out, " ")
+      @line_out = string.concat(@line_out, @p)
+    }
   } fallback {}
 
   try {
     assert_eq(@show_c, true)
-    @_parts = list.push(@_parts, string.pad_start(number.to_string(@stats["chars"]), 7, " "))
+    @p = string.pad_start(number.to_string(map.get(@stats, "chars", 0)), @nw, " ")
+    try {
+      assert_eq(@first, true)
+      @line_out = string.concat(@line_out, @p)
+      @first = false
+    } fallback {
+      @line_out = string.concat(@line_out, " ")
+      @line_out = string.concat(@line_out, @p)
+    }
   } fallback {}
 
   try {
     assert_eq(@show_b, true)
-    @_parts = list.push(@_parts, string.pad_start(number.to_string(@stats["bytes"]), 7, " "))
+    @p = string.pad_start(number.to_string(map.get(@stats, "bytes", 0)), @nw, " ")
+    try {
+      assert_eq(@first, true)
+      @line_out = string.concat(@line_out, @p)
+      @first = false
+    } fallback {
+      @line_out = string.concat(@line_out, " ")
+      @line_out = string.concat(@line_out, @p)
+    }
   } fallback {}
 
   try {
     assert_eq(@show_L, true)
-    @_parts = list.push(@_parts, string.pad_start(number.to_string(@stats["max_len"]), 7, " "))
+    @p = string.pad_start(number.to_string(map.get(@stats, "max_len", 0)), @nw, " ")
+    try {
+      assert_eq(@first, true)
+      @line_out = string.concat(@line_out, @p)
+      @first = false
+    } fallback {
+      @line_out = string.concat(@line_out, " ")
+      @line_out = string.concat(@line_out, @p)
+    }
   } fallback {}
 
-  @output_out = list.join(@_parts, "")
   try {
     assert_eq(string.is_empty(@filename), false)
-    @output_out = string.concat(@output_out, " ")
-    @output_out = string.concat(@output_out, @filename)
+    @line_out = string.concat(@line_out, " ")
+    @line_out = string.concat(@line_out, @filename)
+  } fallback {}
+}
+
+@_wc_emit = procedure(@rows, @file_count, @tot_lines, @tot_words, @tot_chars, @tot_bytes, @tot_max_len, @show_l, @show_w, @show_c, @show_b, @show_L, @number_width) {
+  browse(@rows, @_ri2, @_row2) {
+    @st2 = map.get(@_row2, "stats", map.new())
+    @nm2 = map.get(@_row2, "name", "")
+    @ln = ""
+    @_wc_format_line.call(@st2, @nm2, @show_l, @show_w, @show_c, @show_b, @show_L, @number_width, @ln)
+    sys.echo(@ln)
+  }
+
+  try {
+    assert_gt(@file_count, 1)
+    @tot_stats2 = map.new()
+    @tot_stats2 = map.set(@tot_stats2, "lines", @tot_lines)
+    @tot_stats2 = map.set(@tot_stats2, "words", @tot_words)
+    @tot_stats2 = map.set(@tot_stats2, "chars", @tot_chars)
+    @tot_stats2 = map.set(@tot_stats2, "bytes", @tot_bytes)
+    @tot_stats2 = map.set(@tot_stats2, "max_len", @tot_max_len)
+    @tot_ln = ""
+    @_wc_format_line.call(@tot_stats2, "total", @show_l, @show_w, @show_c, @show_b, @show_L, @number_width, @tot_ln)
+    sys.echo(@tot_ln)
   } fallback {}
 }
 
@@ -221,11 +356,19 @@ try {
     }
     @_stats = {}
     @_count_stats.call(@_content, @_stats)
-    @_out = ""
-    @_format_output.call(@_stats, "", @_show_lines, @_show_words, @_show_chars, @_show_bytes, @_show_max_len, @_out)
-    sys.echo(@_out)
+    @_rows_stdin = list.new()
+    @_r_stdin = map.new()
+    @_r_stdin = map.set(@_r_stdin, "stats", @_stats)
+    @_r_stdin = map.set(@_r_stdin, "name", "")
+    @_rows_stdin = list.push(@_rows_stdin, @_r_stdin)
+    @_nw_stdin = 1
+    @_wc_compute_number_width.call(list.new(), @_show_lines, @_show_words, @_show_chars, @_show_bytes, @_show_max_len, @_nw_stdin)
+    @_wc_emit.call(@_rows_stdin, 1, 0, 0, 0, 0, 0, @_show_lines, @_show_words, @_show_chars, @_show_bytes, @_show_max_len, @_nw_stdin)
   } fallback {
     # Process each file
+    @_nw_files = 1
+    @_wc_compute_number_width.call(@files, @_show_lines, @_show_words, @_show_chars, @_show_bytes, @_show_max_len, @_nw_files)
+    @_rows_files = list.new()
     browse(@files, @_fi, @_fname) {
       @_is_stdin = false
       try {
@@ -283,29 +426,17 @@ try {
           @_display_name = ""
         } fallback {}
 
-        @_out = ""
-        @_format_output.call(@_stats, @_display_name, @_show_lines, @_show_words, @_show_chars, @_show_bytes, @_show_max_len, @_out)
-        sys.echo(@_out)
+        @_row_f = map.new()
+        @_row_f = map.set(@_row_f, "stats", @_stats)
+        @_row_f = map.set(@_row_f, "name", @_display_name)
+        @_rows_files = list.push(@_rows_files, @_row_f)
       } fallback {
         sys.eprint("wc: ${@_fname}: No such file or directory")
         @exit_code = 1
       }
     }
 
-    # Print total if more than one file
-    try {
-      assert_gt(@_file_count, 1)
-      @_total_stats = {
-        "lines": @_total_lines,
-        "words": @_total_words,
-        "chars": @_total_chars,
-        "bytes": @_total_bytes,
-        "max_len": @_total_max_len
-      }
-      @_out = ""
-      @_format_output.call(@_total_stats, "total", @_show_lines, @_show_words, @_show_chars, @_show_bytes, @_show_max_len, @_out)
-      sys.echo(@_out)
-    } fallback {}
+    @_wc_emit.call(@_rows_files, @_file_count, @_total_lines, @_total_words, @_total_chars, @_total_bytes, @_total_max_len, @_show_lines, @_show_words, @_show_chars, @_show_bytes, @_show_max_len, @_nw_files)
   }
 }
 

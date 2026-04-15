@@ -58,11 +58,14 @@ fi
 gnu-mkdir -v "$_TD/vtest_mkdir" > /tmp/mkdir_gnu_v.out 2>/dev/null || true
 rm -rf "$_TD/vtest_mkdir"
 corvo /corvo/coreutils/mkdir.corvo -- -v "$_TD/vtest_mkdir" > /tmp/mkdir_corvo_v.out 2>/dev/null || true
-if diff -q /tmp/mkdir_gnu_v.out /tmp/mkdir_corvo_v.out >/dev/null 2>&1; then
+# GNU prints argv0 (gnu-mkdir); Corvo prints "mkdir:" — compare message after the colon.
+sed 's/^[^:]*: //' /tmp/mkdir_gnu_v.out > /tmp/mkdir_gnu_v.norm
+sed 's/^[^:]*: //' /tmp/mkdir_corvo_v.out > /tmp/mkdir_corvo_v.norm
+if diff -q /tmp/mkdir_gnu_v.norm /tmp/mkdir_corvo_v.norm >/dev/null 2>&1; then
   printf "PASS [mkdir] verbose (-v)\n"; PASS=$((PASS+1))
 else
   printf "FAIL [mkdir] verbose (-v)\n"
-  diff -u /tmp/mkdir_gnu_v.out /tmp/mkdir_corvo_v.out | head -10 || true
+  diff -u /tmp/mkdir_gnu_v.norm /tmp/mkdir_corvo_v.norm | head -10 || true
   FAIL=$((FAIL+1))
 fi
 

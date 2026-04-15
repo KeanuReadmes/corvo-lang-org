@@ -2713,6 +2713,44 @@ fn test_fs_read_meta_tmp() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn test_os_user_id_and_group_id() {
+    let state = run_with_state(
+        r#"
+        var.set("root_uid", os.user_id("root"))
+        var.set("root_gid", os.group_id("root"))
+        "#,
+    )
+    .unwrap();
+    assert_eq!(
+        state.var_get("root_uid").unwrap(),
+        corvo_lang::type_system::Value::Number(0.0)
+    );
+    assert_eq!(
+        state.var_get("root_gid").unwrap(),
+        corvo_lang::type_system::Value::Number(0.0)
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn test_fs_chmod_numeric_integration() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let file = tempfile::NamedTempFile::new().unwrap();
+    let path = file.path().to_string_lossy().replace('\\', "/");
+    let source = format!(
+        r#"
+        fs.chmod("{path}", 384, false)
+        "#,
+        path = path
+    );
+    run_with_state(&source).unwrap();
+    let mode = std::fs::metadata(file.path()).unwrap().permissions().mode() & 0o7777;
+    assert_eq!(mode, 0o600);
+}
+
 // ---------------------------------------------------------------------------
 // Procedure tests
 // ---------------------------------------------------------------------------

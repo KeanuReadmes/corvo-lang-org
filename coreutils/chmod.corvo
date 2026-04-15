@@ -1,0 +1,136 @@
+# coreutils/chmod.corvo — GNU-compatible `chmod`
+# Run: `corvo coreutils/chmod.corvo -- [OPTION]... MODE[,MODE]... FILE...`
+# Or:  `corvo coreutils/chmod.corvo -- [OPTION]... --reference=RFILE FILE...`
+
+@_chmod_spec = {
+  "aliases": {
+    "R": "recursive",
+    "c": "changes",
+    "f": "quiet",
+    "v": "verbose",
+    "recursive": "recursive",
+    "changes": "changes",
+    "quiet": "quiet",
+    "silent": "quiet",
+    "verbose": "verbose"
+  },
+  "long_values": ["reference"]
+}
+
+@parsed   = args.parse(os.argv(), @_chmod_spec)
+@o        = @parsed["options"]
+@operands = @parsed["positional"]
+
+@skip_main = false
+@exit_code = 0
+
+try {
+  assert_eq(@o.get("help", false), true)
+  sys.echo("Usage: chmod [OPTION]... MODE[,MODE]... FILE...")
+  sys.echo("  or:  chmod [OPTION]... --reference=RFILE FILE...")
+  sys.echo("")
+  sys.echo("  -c, --changes          like verbose but report only when a change is made")
+  sys.echo("  -f, --silent, --quiet   suppress most error messages")
+  sys.echo("  -v, --verbose           output a diagnostic for every file processed")
+  sys.echo("      --reference=RFILE   use RFILE's mode instead of MODE values")
+  sys.echo("  -R, --recursive         change files and directories recursively")
+  sys.echo("      --help              display this help and exit")
+  sys.echo("      --version           output version information and exit")
+  @skip_main = true
+} fallback {}
+
+try {
+  assert_eq(@o.get("version", false), true)
+  sys.echo("chmod (Corvo coreutils) 0.1.0")
+  @skip_main = true
+} fallback {}
+
+@recursive = false
+@quiet     = false
+@reference = @o.get("reference", "")
+
+try {
+  assert_eq(@skip_main, true)
+} fallback {
+  @recursive = @o.get("recursive", false)
+  @quiet     = @o.get("quiet", false)
+
+  try {
+    assert_eq(string.is_empty(@reference), false)
+    try {
+      assert_eq(list.len(@operands), 0)
+      sys.eprint("chmod: missing operand after 'reference'")
+      sys.eprint("Try 'chmod --help' for more information.")
+      @exit_code = 1
+      @skip_main = true
+    } fallback {}
+  } fallback {
+    try {
+      assert_lt(list.len(@operands), 2)
+      sys.eprint("chmod: missing operand")
+      sys.eprint("Try 'chmod --help' for more information.")
+      @exit_code = 1
+      @skip_main = true
+    } fallback {}
+  }
+}
+
+@mode_arg = ""
+@files = list.new()
+
+try {
+  assert_eq(@skip_main, true)
+} fallback {
+  try {
+    assert_eq(string.is_empty(@reference), false)
+    @files = @operands
+  } fallback {
+    @mode_arg = list.get(@operands, 0)
+    @files = list.slice(@operands, 1, list.len(@operands))
+  }
+}
+
+@_chmod_one = procedure(@_path, @_mstr, @_mnum, @_use_num, @_rec) {
+  try {
+    try {
+      assert_eq(@_use_num, true)
+      fs.chmod(@_path, @_mnum, @_rec)
+    } fallback {
+      fs.chmod(@_path, @_mstr, @_rec)
+    }
+  } fallback {
+    try {
+      assert_eq(@quiet, false)
+      sys.eprint("chmod: changing permissions of '${@_path}': Operation not permitted")
+    } fallback {}
+    @exit_code = 1
+  }
+}
+
+try {
+  assert_eq(@skip_main, true)
+} fallback {
+  @use_num = false
+  @mode_num = 0.0
+  try {
+    assert_eq(string.is_empty(@reference), false)
+    try {
+      @use_num = true
+      @mode_num = map.get(fs.read_meta(@reference, true), "mode", 0.0)
+    } fallback {
+      sys.eprint("chmod: cannot stat '${@reference}'")
+      @exit_code = 1
+      @skip_main = true
+    }
+  } fallback {}
+
+  try {
+    assert_eq(@skip_main, true)
+  } fallback {
+    browse(@files, @_fi, @_fp) {
+      @_chmod_one.call(@_fp, @mode_arg, @mode_num, @use_num, @recursive)
+    }
+  }
+}
+
+sys.exit(@exit_code)

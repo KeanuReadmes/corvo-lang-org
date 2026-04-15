@@ -46,6 +46,14 @@ cd /fixtures
 . "$TESTS_DIR/parity/basenc.sh"
 # shellcheck source=cksum.sh
 . "$TESTS_DIR/parity/cksum.sh"
+# shellcheck source=chmod.sh
+. "$TESTS_DIR/parity/chmod.sh"
+# shellcheck source=chown.sh
+. "$TESTS_DIR/parity/chown.sh"
+# shellcheck source=chgrp.sh
+. "$TESTS_DIR/parity/chgrp.sh"
+# shellcheck source=chcon.sh
+. "$TESTS_DIR/parity/chcon.sh"
 
 echo ""
 echo "=================================================="

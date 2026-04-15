@@ -251,11 +251,6 @@ try {
   @result_out = list.join(@_selected, "")
 }
 
-# -- Process a line: extract characters (same as bytes for now) ----------------
-@_cut_chars = procedure(@line, @ranges, @complement, @out_delim, @result_out) {
-  @_cut_bytes.call(@line, @ranges, @complement, @out_delim, @result_out)
-}
-
 # -- Process a line: extract fields --------------------------------------------
 @_cut_fields = procedure(@line, @ranges, @complement, @delimiter, @out_delim, @only_delim, @result_out, @skip_out) {
   @skip_out = false
@@ -370,7 +365,8 @@ try {
         } fallback {
           try {
             assert_eq(@_mode, "characters")
-            @_cut_chars.call(@_line, @_ranges, @_complement, @_output_delimiter, @_result)
+            # Call _cut_bytes directly: nested procedure output params do not chain.
+            @_cut_bytes.call(@_line, @_ranges, @_complement, @_output_delimiter, @_result)
           } fallback {
             try {
               assert_eq(@_mode, "fields")

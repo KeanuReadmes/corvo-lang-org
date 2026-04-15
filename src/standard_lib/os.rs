@@ -310,6 +310,42 @@ pub fn user_count(args: &[Value], _named_args: &HashMap<String, Value>) -> Corvo
     ))
 }
 
+/// Resolve a POSIX login name to a UID (for `chown`-style tools).
+#[cfg(unix)]
+pub fn user_id(args: &[Value], _named_args: &HashMap<String, Value>) -> CorvoResult<Value> {
+    let name = args
+        .first()
+        .and_then(|v| v.as_string())
+        .ok_or_else(|| CorvoError::invalid_argument("os.user_id requires a user name"))?;
+    let u = uzers::get_user_by_name(name).ok_or_else(|| {
+        CorvoError::invalid_argument(format!("os.user_id: unknown user '{name}'"))
+    })?;
+    Ok(Value::Number(u.uid() as f64))
+}
+
+#[cfg(not(unix))]
+pub fn user_id(_args: &[Value], _named_args: &HashMap<String, Value>) -> CorvoResult<Value> {
+    Err(CorvoError::runtime("os.user_id is only supported on Unix"))
+}
+
+/// Resolve a POSIX group name to a GID (for `chgrp` / `chown`).
+#[cfg(unix)]
+pub fn group_id(args: &[Value], _named_args: &HashMap<String, Value>) -> CorvoResult<Value> {
+    let name = args
+        .first()
+        .and_then(|v| v.as_string())
+        .ok_or_else(|| CorvoError::invalid_argument("os.group_id requires a group name"))?;
+    let g = uzers::get_group_by_name(name).ok_or_else(|| {
+        CorvoError::invalid_argument(format!("os.group_id: unknown group '{name}'"))
+    })?;
+    Ok(Value::Number(g.gid() as f64))
+}
+
+#[cfg(not(unix))]
+pub fn group_id(_args: &[Value], _named_args: &HashMap<String, Value>) -> CorvoResult<Value> {
+    Err(CorvoError::runtime("os.group_id is only supported on Unix"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

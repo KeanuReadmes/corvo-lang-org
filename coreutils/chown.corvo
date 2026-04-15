@@ -1,0 +1,227 @@
+# coreutils/chown.corvo — GNU-compatible `chown`
+# Run: `corvo coreutils/chown.corvo -- [OPTION]... [OWNER][:[GROUP]] FILE...`
+# Or:  `corvo coreutils/chown.corvo -- [OPTION]... --reference=RFILE FILE...`
+
+@_chown_spec = {
+  "aliases": {
+    "R": "recursive",
+    "h": "no_dereference",
+    "recursive": "recursive",
+    "no_dereference": "no_dereference"
+  },
+  "long_values": ["reference"]
+}
+
+@parsed   = args.parse(os.argv(), @_chown_spec)
+@o        = @parsed["options"]
+@operands = @parsed["positional"]
+
+@skip_main = false
+@exit_code = 0
+@neg_one = math.sub(0, 1)
+
+try {
+  assert_eq(@o.get("help", false), true)
+  sys.echo("Usage: chown [OPTION]... [OWNER][:[GROUP]] FILE...")
+  sys.echo("  or:  chown [OPTION]... --reference=RFILE FILE...")
+  sys.echo("")
+  sys.echo("  -h, --no-dereference   affect symbolic links instead of any referenced file")
+  sys.echo("  -R, --recursive        operate on files and directories recursively")
+  sys.echo("      --reference=RFILE use RFILE's owner and group rather than")
+  sys.echo("                           specifying OWNER:GROUP explicitly")
+  sys.echo("      --help display this help and exit")
+  sys.echo("      --version            output version information and exit")
+  @skip_main = true
+} fallback {}
+
+try {
+  assert_eq(@o.get("version", false), true)
+  sys.echo("chown (Corvo coreutils) 0.1.0")
+  @skip_main = true
+} fallback {}
+
+@recursive       = false
+@no_dereference  = false
+@reference       = @o.get("reference", "")
+@follow          = true
+
+try {
+  assert_eq(@skip_main, true)
+} fallback {
+  @recursive = @o.get("recursive", false)
+  @no_dereference = @o.get("no_dereference", false)
+  @follow = true
+  try {
+    assert_eq(@no_dereference, true)
+    @follow = false
+  } fallback {}
+
+  try {
+    assert_eq(string.is_empty(@reference), false)
+    try {
+      assert_eq(list.len(@operands), 0)
+      sys.eprint("chown: missing operand after 'reference'")
+      sys.eprint("Try 'chown --help' for more information.")
+      @exit_code = 1
+      @skip_main = true
+    } fallback {}
+  } fallback {
+    try {
+      assert_lt(list.len(@operands), 2)
+      sys.eprint("chown: missing operand")
+      sys.eprint("Try 'chown --help' for more information.")
+      @exit_code = 1
+      @skip_main = true
+    } fallback {}
+  }
+}
+
+@owner_spec = ""
+@files = list.new()
+
+try {
+  assert_eq(@skip_main, true)
+} fallback {
+  try {
+    assert_eq(string.is_empty(@reference), false)
+    @files = @operands
+  } fallback {
+    @owner_spec = list.get(@operands, 0)
+    @files = list.slice(@operands, 1, list.len(@operands))
+  }
+}
+
+@_all_digits = procedure(@_s, @_ok) {
+  @_ok = re.match(/^[0-9]+$/, @_s)
+}
+
+@_uid_from = procedure(@_name, @uid_out) {
+  @uid_out = @neg_one
+  try {
+    assert_eq(string.is_empty(@_name), true)
+  } fallback {
+    @digits = false
+    @_all_digits.call(@_name, @digits)
+    try {
+      assert_eq(@digits, true)
+      @uid_out = number.parse(0, @_name)
+    } fallback {
+      @uid_out = os.user_id(@_name)
+    }
+  }
+}
+
+@_gid_from = procedure(@_name, @gid_out) {
+  @gid_out = @neg_one
+  try {
+    assert_eq(string.is_empty(@_name), true)
+  } fallback {
+    @digits = false
+    @_all_digits.call(@_name, @digits)
+    try {
+      assert_eq(@digits, true)
+      @gid_out = number.parse(0, @_name)
+    } fallback {
+      @gid_out = os.group_id(@_name)
+    }
+  }
+}
+
+@uid = @neg_one
+@gid = @neg_one
+
+try {
+  assert_eq(@skip_main, true)
+} fallback {
+  try {
+    assert_eq(string.is_empty(@reference), false)
+    try {
+      @meta = fs.read_meta(@reference, true)
+      @uid = map.get(@meta, "uid", @neg_one)
+      @gid = map.get(@meta, "gid", @neg_one)
+    } fallback {
+      sys.eprint("chown: cannot stat '${@reference}'")
+      @exit_code = 1
+      @skip_main = true
+    }
+  } fallback {
+    try {
+      assert_eq(string.starts_with(@owner_spec, ":"), true)
+      @gpart = string.substring(@owner_spec, 1, string.len(@owner_spec))
+      try {
+        @_gid_from.call(@gpart, @gid)
+      } fallback {
+        sys.eprint("chown: invalid group: '${@gpart}'")
+        @exit_code = 1
+        @skip_main = true
+      }
+    } fallback {
+      @colon = string.index_of(@owner_spec, ":", 0)
+      try {
+        assert_eq(@colon, @neg_one)
+        try {
+          @_uid_from.call(@owner_spec, @uid)
+        } fallback {
+          sys.eprint("chown: invalid user: '${@owner_spec}'")
+          @exit_code = 1
+          @skip_main = true
+        }
+      } fallback {
+        @u = string.substring(@owner_spec, 0, @colon)
+        @g = string.substring(@owner_spec, math.add(@colon, 1), string.len(@owner_spec))
+        try {
+          assert_eq(string.is_empty(@u), false)
+          try {
+            @_uid_from.call(@u, @uid)
+          } fallback {
+            sys.eprint("chown: invalid user: '${@u}'")
+            @exit_code = 1
+            @skip_main = true
+          }
+        } fallback {}
+        try {
+          assert_eq(string.is_empty(@g), false)
+          try {
+            @_gid_from.call(@g, @gid)
+          } fallback {
+            sys.eprint("chown: invalid group: '${@g}'")
+            @exit_code = 1
+            @skip_main = true
+          }
+        } fallback {}
+      }
+    }
+  }
+}
+
+@_chown_path = procedure(@_p, @_u, @_g, @_fol, @_rec, @ec) {
+  try {
+    fs.chown(@_p, @_u, @_g, @_fol)
+  } fallback {
+    sys.eprint("chown: changing ownership of '${@_p}': Operation not permitted")
+    @ec = 1
+  }
+  try {
+    assert_eq(@_rec, false)
+  } fallback {
+    @dm = fs.read_meta(@_p, @_fol)
+    try {
+      assert_eq(map.get(@dm, "is_dir", false), true)
+      @kids = fs.read_dir_meta(@_p, @_fol)
+      browse(@kids, @_ki, @e) {
+        @child = map.get(@e, "path", "")
+        @_chown_path.call(@child, @_u, @_g, @_fol, @_rec, @ec)
+      }
+    } fallback {}
+  }
+}
+
+try {
+  assert_eq(@skip_main, true)
+} fallback {
+  browse(@files, @_fi, @_fp) {
+    @_chown_path.call(@_fp, @uid, @gid, @follow, @recursive, @exit_code)
+  }
+}
+
+sys.exit(@exit_code)

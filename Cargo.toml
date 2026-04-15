@@ -61,4 +61,5 @@ default = ["repl"]
 repl = ["rustyline"]
 
 [target.'cfg(unix)'.dependencies]
+libc = "0.2"
 uzers = "0.11"

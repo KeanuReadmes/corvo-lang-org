@@ -62,11 +62,13 @@ mkdir -p "$_TD/vtest_rmdir"
 gnu-rmdir -v "$_TD/vtest_rmdir" > /tmp/rmdir_gnu_v.out 2>/dev/null || true
 mkdir -p "$_TD/vtest_rmdir"
 corvo /corvo/coreutils/rmdir.corvo -- -v "$_TD/vtest_rmdir" > /tmp/rmdir_corvo_v.out 2>/dev/null || true
-if diff -q /tmp/rmdir_gnu_v.out /tmp/rmdir_corvo_v.out >/dev/null 2>&1; then
+sed 's/^[^:]*: //' /tmp/rmdir_gnu_v.out > /tmp/rmdir_gnu_v.norm
+sed 's/^[^:]*: //' /tmp/rmdir_corvo_v.out > /tmp/rmdir_corvo_v.norm
+if diff -q /tmp/rmdir_gnu_v.norm /tmp/rmdir_corvo_v.norm >/dev/null 2>&1; then
   printf "PASS [rmdir] verbose (-v)\n"; PASS=$((PASS+1))
 else
   printf "FAIL [rmdir] verbose (-v)\n"
-  diff -u /tmp/rmdir_gnu_v.out /tmp/rmdir_corvo_v.out | head -10 || true
+  diff -u /tmp/rmdir_gnu_v.norm /tmp/rmdir_corvo_v.norm | head -10 || true
   FAIL=$((FAIL+1))
 fi
 

@@ -49,6 +49,8 @@ pub fn call(
         "os.uptime" => os::uptime(args, named_args),
         "os.load_average" => os::load_average(args, named_args),
         "os.user_count" => os::user_count(args, named_args),
+        "os.user_id" => os::user_id(args, named_args),
+        "os.group_id" => os::group_id(args, named_args),
 
         "args.scan" => args::scan(args, named_args),
         "args.parse" => args::parse(args, named_args),
@@ -76,6 +78,10 @@ pub fn call(
         "fs.read_meta" => fs::read_meta(args, named_args),
         "fs.path_parent" => fs::path_parent(args, named_args),
         "fs.path_relative" => fs::path_relative(args, named_args),
+        "fs.chmod" => fs::chmod(args, named_args),
+        "fs.chown" => fs::chown(args, named_args),
+        "fs.selinux_context_get" => fs::selinux_context_get(args, named_args),
+        "fs.selinux_context_set" => fs::selinux_context_set(args, named_args),
 
         "time.format_local" => time::format_local(args, named_args),
         "time.format_utc" => time::format_utc(args, named_args),
