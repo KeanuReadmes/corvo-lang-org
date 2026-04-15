@@ -11,6 +11,10 @@ COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 RUN cargo build --release --all-features
 
+# Identify coreutils tools to be bridged dynamically
+COPY coreutils/*.corvo /build/coreutils/
+RUN for f in /build/coreutils/*.corvo; do basename "$f" .corvo; done | sort > tool-list
+
 # ── Runtime image ─────────────────────────────────────────────────────────────
 # Ubuntu 24.04 LTS (Noble) ships both coreutils packages and closely mirrors
 # the Ubuntu 26.04+ layout where GNU tools are prefixed gnu-TOOL.
@@ -18,29 +22,26 @@ FROM ubuntu:noble
 
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-       coreutils bash ca-certificates diffutils \
+       coreutils bash ca-certificates diffutils cargo rustc \
     && rm -rf /var/lib/apt/lists/*
 
-# Save GNU coreutils as gnu-TOOL before uutils may replace the plain names.
+# Discover and save GNU coreutils as gnu-TOOL before uutils may replace the plain names.
 # This matches the Ubuntu 26.04+ convention where GNU stays under the gnu- prefix.
-RUN for tool in ls cat head tail cp rm rmdir mkdir cut wc date uptime b2sum base32 base64 basenc cksum chmod chown chgrp chcon; do \
+COPY --from=builder /build/tool-list /tool-list
+RUN for tool in $(cat /tool-list); do \
       bin="$(command -v "$tool" 2>/dev/null)"; \
-      [ -n "$bin" ] && cp "$bin" "/usr/local/bin/gnu-${tool}"; \
+      [ -n "$bin" ] && cp "$bin" "/usr/local/bin/gnu-${tool}" || true; \
     done
 
-# Install uutils-coreutils (Rust reimplementation).  Tolerate absence on images
-# where the package is unavailable; tests fall back to GNU-only comparison.
+# Install uutils-coreutils (Rust reimplementation).
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
        uutils-coreutils \
     && rm -rf /var/lib/apt/lists/* \
-    || ( rm -rf /var/lib/apt/lists/* ; \
-         echo "INFO: uutils-coreutils not available; uu-TOOL wrappers will be absent" )
+    || echo "INFO: uutils-coreutils not available"
 
-# Create uu-TOOL wrappers.  If uutils installed a multicall binary named
-# 'coreutils', delegate through it (same as the ubuntu 26.04 expected layout).
-# Otherwise symlink whatever TOOL resolves to now.
-RUN for tool in ls cat head tail cp rm rmdir mkdir cut wc date chmod chown chgrp chcon; do \
+# Create uu-TOOL wrappers for parity comparisons.
+RUN for tool in $(cat /tool-list); do \
       if coreutils --list 2>/dev/null | grep -qw "$tool"; then \
         printf '#!/bin/sh\nexec coreutils %s "$@"\n' "$tool" \
           > "/usr/local/bin/uu-${tool}" \
@@ -51,6 +52,10 @@ RUN for tool in ls cat head tail cp rm rmdir mkdir cut wc date chmod chown chgrp
     done || true
 
 COPY --from=builder /build/target/release/corvo /usr/local/bin/corvo
+
+# Copy the entire corvo-lang source so transpiled projects can link to it.
+RUN mkdir -p /corvo/source
+COPY . /corvo/source/
 RUN mkdir -p /corvo/coreutils
 COPY coreutils/*.corvo /corvo/coreutils/
 COPY coreutils/tests/ /corvo/tests/

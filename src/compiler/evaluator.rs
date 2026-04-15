@@ -161,6 +161,16 @@ impl Evaluator {
                         if let Value::Procedure(proc) = target_val {
                             return self.exec_procedure_call(&proc, args, state);
                         }
+                        if let Value::NativeProcedure {
+                            callback: proc, ..
+                        } = target_val
+                        {
+                            let evaluated_args = args
+                                .iter()
+                                .map(|a| self.eval_expr(a, state))
+                                .collect::<Result<Vec<_>, _>>()?;
+                            return (proc)(&evaluated_args, state).map(|_| ());
+                        }
                     }
                     // @map_var.set(key, value) → mutate the variable in place,
                     // equivalent to @map_var["key"] = value.
@@ -387,32 +397,39 @@ impl Evaluator {
             return Ok(());
         }
 
-        // 2. Resolve the procedure variable.
         let proc_val = state.var_get(proc_name)?;
-        let proc = match proc_val {
-            Value::Procedure(p) => p,
+        match proc_val {
+            Value::Procedure(p) => {
+                let expected_params = 1 + shared_vars.len();
+                if p.params.len() != expected_params {
+                    return Err(CorvoError::runtime(format!(
+                        "async_browse: procedure '{}' expects {} parameter(s) (1 item + {} shared), got {}",
+                        proc_name, expected_params, shared_vars.len(), p.params.len()
+                    )));
+                }
+                self.exec_async_browse_ast(items, p, item_param, shared_vars, state)
+            }
+            Value::NativeProcedure { callback: p, .. } => {
+                self.exec_async_browse_native(items, p, item_param, shared_vars, state)
+            }
             other => {
-                return Err(CorvoError::r#type(format!(
+                Err(CorvoError::r#type(format!(
                     "async_browse: '{}' is not a procedure (got {})",
                     proc_name,
                     other.r#type()
                 )))
             }
-        };
-
-        let expected_params = 1 + shared_vars.len();
-        if proc.params.len() != expected_params {
-            return Err(CorvoError::runtime(format!(
-                "async_browse: procedure '{}' expects {} parameter(s) ({} item + {} shared), got {}",
-                proc_name,
-                expected_params,
-                1,
-                shared_vars.len(),
-                proc.params.len()
-            )));
         }
+    }
 
-        // 3. Wrap each shared variable's current value in Arc<Mutex<Value>>.
+    fn exec_async_browse_ast(
+        &mut self,
+        items: Vec<Value>,
+        proc: Box<ProcedureValue>,
+        item_param: &str,
+        shared_vars: &[String],
+        state: &mut RuntimeState,
+    ) -> CorvoResult<()> {
         let shared_arcs: Vec<Arc<Mutex<Value>>> = shared_vars
             .iter()
             .map(|name| {
@@ -421,7 +438,6 @@ impl Evaluator {
             })
             .collect::<Vec<_>>();
 
-        // 4. Spawn one thread per list item.
         let mut handles = Vec::with_capacity(items.len());
         for item in items {
             let proc_clone: ProcedureValue = (*proc).clone();
@@ -432,11 +448,8 @@ impl Evaluator {
 
             let handle = std::thread::spawn(move || -> CorvoResult<()> {
                 let mut thread_state = state_clone;
-
-                // Bind the per-item parameter.
                 thread_state.var_set(item_param_name.clone(), item_clone);
 
-                // Bind shared params: record the snapshot and bind it to the param.
                 let mut snapshots: Vec<Value> = Vec::with_capacity(arcs.len());
                 for (i, arc) in arcs.iter().enumerate() {
                     let param_name = &proc_clone.params[i + 1];
@@ -445,13 +458,10 @@ impl Evaluator {
                     thread_state.var_set(param_name.clone(), snapshot);
                 }
 
-                // Run the procedure body (no locks held during execution).
                 let body = proc_clone.body.clone();
                 let mut evaluator = Evaluator::new();
                 let result = evaluator.execute_block(&body, &mut thread_state);
 
-                // Delta-merge write-back: for each shared param, hold the mutex
-                // and merge the thread's change into the current mutex value.
                 for (i, arc) in arcs.iter().enumerate() {
                     let param_name = &proc_clone.params[i + 1];
                     let thread_final = thread_state
@@ -469,7 +479,6 @@ impl Evaluator {
             handles.push(handle);
         }
 
-        // 5. Join all threads; collect the first error if any.
         let mut first_err: Option<CorvoError> = None;
         for handle in handles {
             match handle.join() {
@@ -481,15 +490,91 @@ impl Evaluator {
                 }
                 Err(_) => {
                     if first_err.is_none() {
-                        first_err = Some(CorvoError::runtime(
-                            "a thread panicked during async_browse execution",
-                        ));
+                        first_err = Some(CorvoError::runtime("a thread panicked"));
                     }
                 }
             }
         }
 
-        // 6. Write the final shared values back to the outer state.
+        for (i, arc) in shared_arcs.iter().enumerate() {
+            let final_val = arc.lock().unwrap().clone();
+            state.var_set(shared_vars[i].clone(), final_val);
+        }
+
+        match first_err {
+            Some(e) => Err(e),
+            None => Ok(()),
+        }
+    }
+
+    pub fn exec_async_browse_native(
+        &mut self,
+        items: Vec<Value>,
+        proc: std::sync::Arc<dyn Fn(&[Value], &mut RuntimeState) -> CorvoResult<Value> + Send + Sync>,
+        _item_param: &str,
+        shared_vars: &[String],
+        state: &mut RuntimeState,
+    ) -> CorvoResult<()> {
+        let shared_arcs: Vec<Arc<Mutex<Value>>> = shared_vars
+            .iter()
+            .map(|name| {
+                let val = state.var_get(name).unwrap_or(Value::Null);
+                Arc::new(Mutex::new(val))
+            })
+            .collect::<Vec<_>>();
+
+        let mut handles = Vec::with_capacity(items.len());
+        for item in items {
+            let proc_clone = Arc::clone(&proc);
+            let item_clone = item.clone();
+            let arcs: Vec<Arc<Mutex<Value>>> = shared_arcs.iter().map(Arc::clone).collect();
+            let state_clone = state.clone();
+            let shared_vars_clone: Vec<String> = shared_vars.iter().cloned().collect();
+
+            let handle = std::thread::spawn(move || -> CorvoResult<()> {
+                let mut thread_state = state_clone;
+
+                let mut snapshots: Vec<Value> = Vec::with_capacity(arcs.len());
+                let mut call_args = vec![item_clone];
+                for arc in &arcs {
+                    let snapshot = arc.lock().unwrap().clone();
+                    snapshots.push(snapshot.clone());
+                    call_args.push(snapshot);
+                }
+
+                let thread_result = (proc_clone)(&call_args, &mut thread_state);
+
+                for (i, arc) in arcs.iter().enumerate() {
+                    let name = &shared_vars_clone[i];
+                    let thread_final = thread_state.var_get(name).unwrap_or(Value::Null);
+                    let mut guard = arc.lock().unwrap();
+                    let current = guard.clone();
+                    *guard = merge_shared_writeback(&snapshots[i], &thread_final, &current);
+                }
+
+                thread_result.map(|_| ())
+            });
+
+            handles.push(handle);
+        }
+
+        let mut first_err: Option<CorvoError> = None;
+        for handle in handles {
+            match handle.join() {
+                Ok(Ok(())) => {}
+                Ok(Err(e)) => {
+                    if first_err.is_none() {
+                        first_err = Some(e);
+                    }
+                }
+                Err(_) => {
+                    if first_err.is_none() {
+                        first_err = Some(CorvoError::runtime("a thread panicked"));
+                    }
+                }
+            }
+        }
+
         for (i, arc) in shared_arcs.iter().enumerate() {
             let final_val = arc.lock().unwrap().clone();
             state.var_set(shared_vars[i].clone(), final_val);
@@ -616,7 +701,7 @@ impl Evaluator {
                     Value::Number(_) => "number",
                     Value::List(_) => "list",
                     Value::Map(_) => "map",
-                    Value::Procedure(_) => return Err(CorvoError::runtime(
+                    Value::Procedure(_) | Value::NativeProcedure { .. } => return Err(CorvoError::runtime(
                         "procedure.call must be used as a statement, not in an expression context",
                     )),
                     other => {
@@ -871,7 +956,7 @@ impl Default for Evaluator {
 ///
 /// For all other value types the thread's final value replaces the current
 /// mutex value (last-writer-wins semantics).
-fn merge_shared_writeback(snapshot: &Value, thread_final: &Value, current: &Value) -> Value {
+pub fn merge_shared_writeback(snapshot: &Value, thread_final: &Value, current: &Value) -> Value {
     match (snapshot, thread_final, current) {
         (Value::List(snap), Value::List(fin), Value::List(cur)) if fin.len() >= snap.len() => {
             // Append only the items the thread added beyond its snapshot.

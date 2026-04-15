@@ -208,8 +208,8 @@ When implementing a new GNU coreutils-compatible tool in `coreutils/`:
      and add `run_uutils_case` + `show_time` calls at the end.
    - Add a new `coreutils/tests/matrix/<toolname>.sh` with extended
      flag-combination cases.
-   - Source both new scripts from `parity/run-all.sh` and `matrix/run-all.sh`
-     respectively (one `. "$TESTS_DIR/parity/<toolname>.sh"` line each).
+   - These scripts are automatically discovered and executed by their
+     respective `run-all.sh` runners; no manual registration is required.
    - Use `gnu-<toolname>` as the GNU reference (already set up in the Docker
      image).  Add `run_uutils_case` calls for `uu-<toolname>` (informational).
    - If the tool performs file-system operations, compare the resulting

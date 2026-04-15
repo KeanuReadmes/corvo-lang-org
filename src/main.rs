@@ -37,6 +37,9 @@ struct Args {
     #[structopt(long, help = "Compile to standalone executable")]
     compile: bool,
 
+    #[structopt(long, help = "Transpile to a Rust project directory")]
+    transpile: bool,
+
     #[structopt(
         short,
         long,
@@ -109,6 +112,8 @@ fn main() {
     if let Some(file) = args.file {
         if args.compile {
             compile_file(&file, args.output.as_deref(), args.debug, args.no_debug);
+        } else if args.transpile {
+            transpile_file(&file, args.output.as_deref());
         } else if args.lint {
             lint_file(&file);
         } else if args.check {
@@ -206,6 +211,51 @@ fn compile_file(
         }
         Err(e) => {
             eprintln!("error: Compilation failed: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn transpile_file(file: &std::path::Path, output: Option<&std::path::Path>) {
+    let source = match std::fs::read_to_string(file) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: Cannot read '{}': {}", file.display(), e);
+            std::process::exit(1);
+        }
+    };
+
+    // Determine output directory
+    let output_dir = match output {
+        Some(p) => p.to_path_buf(),
+        None => {
+            let stem = file.file_stem().unwrap_or_default().to_string_lossy();
+            PathBuf::from(stem.to_string())
+        }
+    };
+
+    let mut compiler = corvo_lang::compiler::Compiler::new(source, file.to_path_buf());
+
+    eprintln!(
+        "Pre-executing {} to capture static values...",
+        file.display()
+    );
+    match compiler.pre_execute() {
+        Ok(_) => {}
+        Err(e) => {
+            eprintln!("warning: Pre-execution error: {}", e);
+        }
+    }
+
+    eprintln!("Transpiling {} to Rust project in {}...", file.display(), output_dir.display());
+
+    match compiler.transpile(&output_dir) {
+        Ok(_) => {
+            eprintln!("Transpiled successfully to {}", output_dir.display());
+            eprintln!("To run: cd {} && cargo run", output_dir.display());
+        }
+        Err(e) => {
+            eprintln!("error: Transpilation failed: {}", e);
             std::process::exit(1);
         }
     }
@@ -331,7 +381,8 @@ fn print_usage() {
     eprintln!("  -r, --repl           Start the REPL");
     eprintln!("  -e, --eval <EXPR>    Evaluate an expression");
     eprintln!("  -c, --compile        Compile to standalone executable");
-    eprintln!("  -o, --output <PATH>  Output path (for --compile)");
+    eprintln!("      --transpile      Transpile to a Rust project directory");
+    eprintln!("  -o, --output <PATH>  Output path (for --compile or --transpile)");
     eprintln!("  -v, --version        Print version");
     eprintln!("      --check          Check syntax without executing");
     eprintln!("      --lint           Analyse code for errors (like cargo clippy)");
