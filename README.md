@@ -18,7 +18,7 @@ sys.echo("Written ${map.len(@data)} entries")
 
 ## Three ideas that set Corvo apart
 
-### 1 · Zero dependencies. Zero supply-chain risk.
+### 1 · Zero dependencies. Zero supply-chain risk. One file.
 
 Most scripting ecosystems hand you a package manager on day one. Corvo does the opposite: there is no `import`, no `require`, no `pip install`, no `npm install`, no lock file, no vulnerability scanner to run before you can ship.
 
@@ -43,7 +43,7 @@ Every capability — HTTP, JSON, YAML, CSV, XML, HCL, cryptography, DNS, SSH, rs
 | `map` | get, set, keys, values, merge, remove, … |
 | `args` | GNU-style and dig-style argument parser |
 
-### 2 · No if/else. No function declarations. All in one go.
+### 2 · No if/else. No function declarations. All in one go. Any small model can code it.
 
 Corvo is a procedural language in the truest sense: execution starts at line one and ends at the last line. There is no `def`, no `fn`, no `function`, no recursion, no hidden call stack. The control flow you see is the control flow you get.
 
