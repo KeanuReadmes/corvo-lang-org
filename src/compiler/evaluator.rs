@@ -1,4 +1,4 @@
-use crate::ast::{AssertKind, Expr, MatchPattern, Program, Stmt};
+use crate::ast::{AssertKind, BinaryOp, Expr, MatchPattern, Program, Stmt, UnaryOp};
 use crate::runtime::RuntimeState;
 use crate::standard_lib;
 use crate::type_system::{ProcedureValue, Value};
@@ -570,6 +570,39 @@ impl Evaluator {
             Expr::SharedArg { .. } => Err(CorvoError::runtime(
                 "shared @var is only valid inside async_browse arguments",
             )),
+            Expr::Unary { op, operand } => {
+                let v = self.eval_expr(operand, state)?;
+                match op {
+                    UnaryOp::Neg => match v {
+                        Value::Number(n) => Ok(Value::Number(-n)),
+                        other => Err(CorvoError::r#type(format!(
+                            "Unary '-' expects a number, got {}",
+                            other.r#type()
+                        ))),
+                    },
+                }
+            }
+            Expr::Binary { op, left, right } => {
+                let l = self.eval_expr(left, state)?;
+                let r = self.eval_expr(right, state)?;
+                let (ln, rn) = match (l, r) {
+                    (Value::Number(a), Value::Number(b)) => (a, b),
+                    (a, b) => {
+                        return Err(CorvoError::r#type(format!(
+                            "Arithmetic expects numbers, got {} and {}",
+                            a.r#type(),
+                            b.r#type()
+                        )));
+                    }
+                };
+                let out = match op {
+                    BinaryOp::Add => ln + rn,
+                    BinaryOp::Sub => ln - rn,
+                    BinaryOp::Mul => ln * rn,
+                    BinaryOp::Div => ln / rn,
+                };
+                Ok(Value::Number(out))
+            }
             Expr::MethodCall {
                 target,
                 method,

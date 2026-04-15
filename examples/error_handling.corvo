@@ -30,13 +30,13 @@ sys.echo("Failed try: ${@result}")
 @section.call("=== Multiple Fallbacks ===")
 @step = 0
 try {
-    @step = math.add(@step, 1)
+    @step += 1
     assert_eq(1, 2)
 } fallback {
-    @step = math.add(@step, 1)
+    @step += 1
     assert_eq(3, 4)
 } fallback {
-    @step = math.add(@step, 1)
+    @step += 1
     sys.echo("Third fallback executed, step=${@step}")
 }
 

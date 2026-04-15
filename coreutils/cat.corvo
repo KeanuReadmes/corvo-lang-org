@@ -148,7 +148,7 @@ try {
       # -n: number all lines
       try {
         assert_eq(@n_flag, true)
-        @lnum = math.add(@lnum, 1)
+        @lnum += 1
         @_ns = string.pad_start(number.to_string(@lnum), 6, " ")
         sys.echo("${@_ns}\t${@_l}${@_suf}")
       } fallback {
@@ -157,7 +157,7 @@ try {
           assert_eq(@b_flag, true)
           try {
             assert_eq(@_is_blank, false)
-            @lnum = math.add(@lnum, 1)
+            @lnum += 1
             @_ns = string.pad_start(number.to_string(@lnum), 6, " ")
             sys.echo("${@_ns}\t${@_l}${@_suf}")
           } fallback {
@@ -191,7 +191,7 @@ try {
       # Drop the trailing empty element produced by a final newline
       try {
         assert_eq(string.is_empty(list.last(@_lines)), true)
-        @_lines = list.slice(@_lines, 0, math.sub(list.len(@_lines), 1))
+        @_lines = list.slice(@_lines, 0, list.len(@_lines) - 1)
       } fallback {}
       @_print_lines.call(@_lines, @_number, @_number_nonblank, @_squeeze, @_show_ends, @_show_tabs, @_lnum, @_prev_blank)
     } fallback {
@@ -223,7 +223,7 @@ try {
           @_lines   = string.split(@_content, "\n")
           try {
             assert_eq(string.is_empty(list.last(@_lines)), true)
-            @_lines = list.slice(@_lines, 0, math.sub(list.len(@_lines), 1))
+            @_lines = list.slice(@_lines, 0, list.len(@_lines) - 1)
           } fallback {}
           @_print_lines.call(@_lines, @_number, @_number_nonblank, @_squeeze, @_show_ends, @_show_tabs, @_lnum, @_prev_blank)
         } fallback {
@@ -245,7 +245,7 @@ try {
           # Drop trailing empty element from final newline
           try {
             assert_eq(string.is_empty(list.last(@_lines)), true)
-            @_lines = list.slice(@_lines, 0, math.sub(list.len(@_lines), 1))
+            @_lines = list.slice(@_lines, 0, list.len(@_lines) - 1)
           } fallback {}
           @_print_lines.call(@_lines, @_number, @_number_nonblank, @_squeeze, @_show_ends, @_show_tabs, @_lnum, @_prev_blank)
         } fallback {

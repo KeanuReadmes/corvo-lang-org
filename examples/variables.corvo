@@ -2,13 +2,13 @@
 
 # Shared binary ops — output via @result (pass-by-reference)
 @arith_add = procedure(@a, @b, @result) {
-    @result = math.add(@a, @b)
+    @result = @a + @b
 }
 @arith_mul = procedure(@a, @b, @result) {
-    @result = math.mul(@a, @b)
+    @result = @a * @b
 }
 @arith_div = procedure(@a, @b, @result) {
-    @result = math.div(@a, @b)
+    @result = @a / @b
 }
 
 @x = 10

@@ -1,7 +1,7 @@
 # loop.corvo - Loop with try/fallback
 
 @increment = procedure(@n) {
-    @n = math.add(@n, 1)
+    @n += 1
 }
 
 # Count from 1 to 5
@@ -29,7 +29,7 @@ sys.echo("Done!")
 @sum = 0
 @i = 1
 loop {
-    @sum = math.add(@sum, @i)
+    @sum += @i
     @increment.call(@i)
     try {
         assert_eq(@i, 101)

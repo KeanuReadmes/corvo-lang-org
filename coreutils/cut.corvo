@@ -136,13 +136,13 @@ try {
 
 # -- Parse range list ----------------------------------------------------------
 # Parses "1,3-5,7-" into a list of {start, end} maps where end=-1 means "to end"
-@_NEG_ONE = math.sub(0, 1)
+@_NEG_ONE = -1
 
 @_parse_ranges = procedure(@list_str, @ranges_out) {
   @ranges_out = list.new()
   @_parts = string.split(@list_str, ",")
   browse(@_parts, @_idx, @_part) {
-    @_neg1 = math.sub(0, 1)
+    @_neg1 = -1
     @_range = {"start": 1, "end": @_neg1}
     @_part = string.trim(@_part)
 
@@ -170,7 +170,7 @@ try {
         @_range["end"] = number.parse(0, @_right)
       } fallback {
         # "N-" (to end)
-        @_neg1 = math.sub(0, 1)
+        @_neg1 = -1
         @_range["end"] = @_neg1
       }
     } fallback {
@@ -187,7 +187,7 @@ try {
 # -- Check if index is in ranges -----------------------------------------------
 @_in_ranges = procedure(@idx, @ranges, @max_idx, @complement, @result_out) {
   @_found = false
-  @_neg1_check = math.sub(0, 1)
+  @_neg1_check = -1
   browse(@ranges, @_ri, @_range) {
     @_start = @_range["start"]
     @_end = @_range["end"]
@@ -245,7 +245,7 @@ try {
       assert_eq(@_include, true)
       @_selected = list.push(@_selected, @_byte)
     } fallback {}
-    @_i = math.add(@_i, 1)
+    @_i += 1
   }
 
   @result_out = list.join(@_selected, "")
@@ -281,7 +281,7 @@ try {
         assert_eq(@_include, true)
         @_selected = list.push(@_selected, @_field)
       } fallback {}
-      @_i = math.add(@_i, 1)
+      @_i += 1
     }
 
     @result_out = list.join(@_selected, @out_delim)
@@ -352,7 +352,7 @@ try {
       # Remove trailing empty element if content ends with newline
       try {
         assert_eq(string.is_empty(list.last(@_lines)), true)
-        @_lines = list.slice(@_lines, 0, math.sub(list.len(@_lines), 1))
+        @_lines = list.slice(@_lines, 0, list.len(@_lines) - 1)
       } fallback {}
 
       browse(@_lines, @_li, @_line) {

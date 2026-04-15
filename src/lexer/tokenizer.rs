@@ -7,6 +7,8 @@ pub struct Lexer<'a> {
     chars: Vec<char>,
     pos: Position,
     start: Position,
+    /// When true, `/` begins a `/pattern/flags` regex literal; otherwise `/` is division.
+    regex_allowed: bool,
 }
 
 impl<'a> Lexer<'a> {
@@ -16,6 +18,7 @@ impl<'a> Lexer<'a> {
             chars: source.chars().collect(),
             pos: Position::start(),
             start: Position::start(),
+            regex_allowed: true,
         }
     }
 
@@ -35,33 +38,71 @@ impl<'a> Lexer<'a> {
     }
 
     pub fn next_token(&mut self) -> CorvoResult<Token> {
-        self.skip_whitespace();
+        if self.skip_whitespace() {
+            self.regex_allowed = true;
+        }
         self.start = self.pos;
 
         if self.is_at_end() {
+            self.bump_regex_allowed(&TokenType::Eof);
             return Ok(Token::new(TokenType::Eof, Span::point(self.pos)));
         }
 
         let ch = self.peek();
 
-        match ch {
-            '#' => self.scan_comment(),
-            '"' => self.scan_string(),
-            '0'..='9' => self.scan_number(),
-            'a'..='z' | 'A'..='Z' | '_' => self.scan_identifier(),
-            _ => self.scan_operator(),
+        let token = match ch {
+            '#' => self.scan_comment()?,
+            '"' => self.scan_string()?,
+            '0'..='9' => self.scan_number()?,
+            'a'..='z' | 'A'..='Z' | '_' => self.scan_identifier()?,
+            _ => self.scan_operator()?,
+        };
+
+        if !matches!(token.token_type, TokenType::Comment(_)) {
+            self.bump_regex_allowed(&token.token_type);
         }
+        Ok(token)
     }
 
-    fn skip_whitespace(&mut self) {
+    fn bump_regex_allowed(&mut self, tt: &TokenType) {
+        self.regex_allowed = Self::regex_allowed_after_token(tt);
+    }
+
+    fn regex_allowed_after_token(tt: &TokenType) -> bool {
+        matches!(
+            tt,
+            TokenType::LeftParen
+                | TokenType::LeftBracket
+                | TokenType::LeftBrace
+                | TokenType::Comma
+                | TokenType::Equals
+                | TokenType::FatArrow
+                | TokenType::Plus
+                | TokenType::Minus
+                | TokenType::Star
+                | TokenType::Slash
+                | TokenType::PlusEqual
+                | TokenType::MinusEqual
+                | TokenType::OrEqual
+        )
+    }
+
+    /// Skips spaces, tabs, CR, and LF. Returns whether any newline was crossed.
+    fn skip_whitespace(&mut self) -> bool {
+        let mut crossed_newline = false;
         while !self.is_at_end() {
             match self.peek() {
-                ' ' | '\t' | '\r' | '\n' => {
+                ' ' | '\t' | '\r' => {
+                    self.advance();
+                }
+                '\n' => {
+                    crossed_newline = true;
                     self.advance();
                 }
                 _ => break,
             }
         }
+        crossed_newline
     }
 
     fn scan_comment(&mut self) -> CorvoResult<Token> {
@@ -173,9 +214,12 @@ impl<'a> Lexer<'a> {
     fn scan_interpolation_expr(&mut self, string_start: Position) -> CorvoResult<Vec<Token>> {
         let mut tokens = Vec::new();
         let mut brace_depth: usize = 1;
+        let mut regex_allowed = true;
 
         while !self.is_at_end() && brace_depth > 0 {
-            self.skip_whitespace();
+            if self.skip_whitespace() {
+                regex_allowed = true;
+            }
 
             if self.is_at_end() || brace_depth == 0 {
                 break;
@@ -223,15 +267,16 @@ impl<'a> Lexer<'a> {
                     }
 
                     self.advance(); // closing quote
-                    tokens.push(Token::string(inner_value, expr_start, self.pos));
+                    let tok = Token::string(inner_value, expr_start, self.pos);
+                    regex_allowed = Self::regex_allowed_after_token(&tok.token_type);
+                    tokens.push(tok);
                 }
                 '{' => {
                     brace_depth += 1;
                     self.advance();
-                    tokens.push(Token::new(
-                        TokenType::LeftBrace,
-                        Span::new(expr_start, self.pos),
-                    ));
+                    let tok = Token::new(TokenType::LeftBrace, Span::new(expr_start, self.pos));
+                    regex_allowed = Self::regex_allowed_after_token(&tok.token_type);
+                    tokens.push(tok);
                 }
                 '}' => {
                     brace_depth -= 1;
@@ -240,56 +285,87 @@ impl<'a> Lexer<'a> {
                         break;
                     }
                     self.advance();
-                    tokens.push(Token::new(
-                        TokenType::RightBrace,
-                        Span::new(expr_start, self.pos),
-                    ));
+                    let tok = Token::new(TokenType::RightBrace, Span::new(expr_start, self.pos));
+                    regex_allowed = Self::regex_allowed_after_token(&tok.token_type);
+                    tokens.push(tok);
                 }
                 '(' => {
                     self.advance();
-                    tokens.push(Token::new(
-                        TokenType::LeftParen,
-                        Span::new(expr_start, self.pos),
-                    ));
+                    let tok = Token::new(TokenType::LeftParen, Span::new(expr_start, self.pos));
+                    regex_allowed = Self::regex_allowed_after_token(&tok.token_type);
+                    tokens.push(tok);
                 }
                 ')' => {
                     self.advance();
-                    tokens.push(Token::new(
-                        TokenType::RightParen,
-                        Span::new(expr_start, self.pos),
-                    ));
+                    let tok = Token::new(TokenType::RightParen, Span::new(expr_start, self.pos));
+                    regex_allowed = Self::regex_allowed_after_token(&tok.token_type);
+                    tokens.push(tok);
                 }
                 '[' => {
                     self.advance();
-                    tokens.push(Token::new(
-                        TokenType::LeftBracket,
-                        Span::new(expr_start, self.pos),
-                    ));
+                    let tok = Token::new(TokenType::LeftBracket, Span::new(expr_start, self.pos));
+                    regex_allowed = Self::regex_allowed_after_token(&tok.token_type);
+                    tokens.push(tok);
                 }
                 ']' => {
                     self.advance();
-                    tokens.push(Token::new(
-                        TokenType::RightBracket,
-                        Span::new(expr_start, self.pos),
-                    ));
+                    let tok = Token::new(TokenType::RightBracket, Span::new(expr_start, self.pos));
+                    regex_allowed = Self::regex_allowed_after_token(&tok.token_type);
+                    tokens.push(tok);
                 }
                 ',' => {
                     self.advance();
-                    tokens.push(Token::new(
-                        TokenType::Comma,
-                        Span::new(expr_start, self.pos),
-                    ));
+                    let tok = Token::new(TokenType::Comma, Span::new(expr_start, self.pos));
+                    regex_allowed = Self::regex_allowed_after_token(&tok.token_type);
+                    tokens.push(tok);
                 }
                 '.' => {
                     self.advance();
-                    tokens.push(Token::new(TokenType::Dot, Span::new(expr_start, self.pos)));
+                    let tok = Token::new(TokenType::Dot, Span::new(expr_start, self.pos));
+                    regex_allowed = Self::regex_allowed_after_token(&tok.token_type);
+                    tokens.push(tok);
                 }
                 ':' => {
                     self.advance();
-                    tokens.push(Token::new(
-                        TokenType::Colon,
-                        Span::new(expr_start, self.pos),
-                    ));
+                    let tok = Token::new(TokenType::Colon, Span::new(expr_start, self.pos));
+                    regex_allowed = Self::regex_allowed_after_token(&tok.token_type);
+                    tokens.push(tok);
+                }
+                '+' => {
+                    self.advance();
+                    let tt = if self.peek() == '+' {
+                        self.advance();
+                        TokenType::Increment
+                    } else if self.peek() == '=' {
+                        self.advance();
+                        TokenType::PlusEqual
+                    } else {
+                        TokenType::Plus
+                    };
+                    let tok = Token::new(tt, Span::new(expr_start, self.pos));
+                    regex_allowed = Self::regex_allowed_after_token(&tok.token_type);
+                    tokens.push(tok);
+                }
+                '-' => {
+                    self.advance();
+                    let tt = if self.peek() == '-' {
+                        self.advance();
+                        TokenType::Decrement
+                    } else if self.peek() == '=' {
+                        self.advance();
+                        TokenType::MinusEqual
+                    } else {
+                        TokenType::Minus
+                    };
+                    let tok = Token::new(tt, Span::new(expr_start, self.pos));
+                    regex_allowed = Self::regex_allowed_after_token(&tok.token_type);
+                    tokens.push(tok);
+                }
+                '*' => {
+                    self.advance();
+                    let tok = Token::new(TokenType::Star, Span::new(expr_start, self.pos));
+                    regex_allowed = Self::regex_allowed_after_token(&tok.token_type);
+                    tokens.push(tok);
                 }
                 '0'..='9' => {
                     let mut value = String::new();
@@ -304,7 +380,9 @@ impl<'a> Lexer<'a> {
                         CorvoError::lexing(format!("Invalid number: {}", value))
                             .with_span(Span::new(expr_start, self.pos))
                     })?;
-                    tokens.push(Token::number(num, expr_start, self.pos));
+                    let tok = Token::number(num, expr_start, self.pos);
+                    regex_allowed = Self::regex_allowed_after_token(&tok.token_type);
+                    tokens.push(tok);
                 }
                 'a'..='z' | 'A'..='Z' | '_' => {
                     let mut name = String::new();
@@ -335,11 +413,15 @@ impl<'a> Lexer<'a> {
                         _ => TokenType::Identifier(name),
                     };
 
-                    tokens.push(Token::new(token_type, Span::new(expr_start, self.pos)));
+                    let tok = Token::new(token_type, Span::new(expr_start, self.pos));
+                    regex_allowed = Self::regex_allowed_after_token(&tok.token_type);
+                    tokens.push(tok);
                 }
                 '@' => {
                     self.advance();
-                    tokens.push(Token::new(TokenType::At, Span::new(expr_start, self.pos)));
+                    let tok = Token::new(TokenType::At, Span::new(expr_start, self.pos));
+                    regex_allowed = Self::regex_allowed_after_token(&tok.token_type);
+                    tokens.push(tok);
                 }
                 '=' => {
                     self.advance();
@@ -349,14 +431,23 @@ impl<'a> Lexer<'a> {
                     } else {
                         TokenType::Equals
                     };
-                    tokens.push(Token::new(token_type, Span::new(expr_start, self.pos)));
+                    let tok = Token::new(token_type, Span::new(expr_start, self.pos));
+                    regex_allowed = Self::regex_allowed_after_token(&tok.token_type);
+                    tokens.push(tok);
                 }
                 '/' => {
-                    // Regex literal inside interpolation
-                    self.start = self.pos; // mark start of regex for error spans
-                    self.advance(); // consume '/'
-                    let tok = self.scan_regex()?;
-                    tokens.push(tok);
+                    if regex_allowed {
+                        self.start = self.pos;
+                        self.advance(); // consume '/'
+                        let tok = self.scan_regex()?;
+                        regex_allowed = Self::regex_allowed_after_token(&tok.token_type);
+                        tokens.push(tok);
+                    } else {
+                        self.advance();
+                        let tok = Token::new(TokenType::Slash, Span::new(expr_start, self.pos));
+                        regex_allowed = Self::regex_allowed_after_token(&tok.token_type);
+                        tokens.push(tok);
+                    }
                 }
                 _ => {
                     return Err(CorvoError::lexing(format!(
@@ -511,7 +602,7 @@ impl<'a> Lexer<'a> {
                     self.advance(); // consume '='
                     TokenType::PlusEqual
                 } else {
-                    TokenType::Illegal(ch.to_string())
+                    TokenType::Plus
                 }
             }
             '-' => {
@@ -522,12 +613,17 @@ impl<'a> Lexer<'a> {
                     self.advance(); // consume '='
                     TokenType::MinusEqual
                 } else {
-                    TokenType::Illegal(ch.to_string())
+                    TokenType::Minus
                 }
             }
+            '*' => TokenType::Star,
             '/' => {
-                // Regex literal: /pattern/flags
-                return self.scan_regex();
+                if self.regex_allowed {
+                    // Regex literal: /pattern/flags
+                    self.start = start;
+                    return self.scan_regex();
+                }
+                TokenType::Slash
             }
             _ => TokenType::Illegal(ch.to_string()),
         };
@@ -913,6 +1009,54 @@ mod tests {
                 TokenType::Colon,
                 TokenType::Eof,
             ],
+        );
+    }
+
+    #[test]
+    fn test_scan_infix_arithmetic_tokens() {
+        assert_token_types(
+            "1 + 2 - 3 * 4 / 5",
+            &[
+                TokenType::Number(1.0),
+                TokenType::Plus,
+                TokenType::Number(2.0),
+                TokenType::Minus,
+                TokenType::Number(3.0),
+                TokenType::Star,
+                TokenType::Number(4.0),
+                TokenType::Slash,
+                TokenType::Number(5.0),
+                TokenType::Eof,
+            ],
+        );
+    }
+
+    #[test]
+    fn test_slash_is_division_after_number() {
+        let tokens = tokenize("10 / 2").unwrap();
+        assert_eq!(tokens[0].token_type, TokenType::Number(10.0));
+        assert_eq!(tokens[1].token_type, TokenType::Slash);
+        assert_eq!(tokens[2].token_type, TokenType::Number(2.0));
+    }
+
+    #[test]
+    fn test_slash_starts_regex_when_allowed() {
+        let tokens = tokenize("/[0-9]+/").unwrap();
+        assert_eq!(
+            tokens[0].token_type,
+            TokenType::Regex("[0-9]+".to_string(), "".to_string())
+        );
+    }
+
+    #[test]
+    fn test_slash_regex_after_equals() {
+        let tokens = tokenize("@x = /a/").unwrap();
+        assert_eq!(tokens[0].token_type, TokenType::At);
+        assert_eq!(tokens[1].token_type, TokenType::Identifier("x".to_string()));
+        assert_eq!(tokens[2].token_type, TokenType::Equals);
+        assert_eq!(
+            tokens[3].token_type,
+            TokenType::Regex("a".to_string(), "".to_string())
         );
     }
 

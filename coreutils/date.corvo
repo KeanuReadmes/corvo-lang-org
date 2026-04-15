@@ -221,7 +221,7 @@ try {
   assert_eq(@skip_main, true)
 } fallback {
   @_ts_int = number.floor(@_timestamp)
-  @_ns = number.floor(math.mul(math.sub(@_timestamp, @_ts_int), 1000000000))
+  @_ns = number.floor((@_timestamp - @_ts_int) * 1000000000)
 
   @_result = ""
   try {

@@ -22,17 +22,17 @@ try {
 }
 
 @section.call("=== number.abs ===")
-@neg = math.sub(0, 7)
+@neg = 0 - 7
 sys.echo("abs(-7): ${number.abs(@neg)}")
 sys.echo("abs(7):  ${number.abs(7)}")
 
 @section.call("=== number.floor ===")
-@neg_small = math.sub(0, 3.1)
+@neg_small = 0 - 3.1
 sys.echo("floor(3.9): ${number.floor(3.9)}")
 sys.echo("floor(-3.1): ${number.floor(@neg_small)}")
 
 @section.call("=== number.ceil ===")
-@neg_large = math.sub(0, 3.9)
+@neg_large = 0 - 3.9
 sys.echo("ceil(3.1): ${number.ceil(3.1)}")
 sys.echo("ceil(-3.9): ${number.ceil(@neg_large)}")
 
@@ -45,7 +45,7 @@ sys.echo("sqrt(9):  ${number.sqrt(9)}")
 sys.echo("sqrt(2):  ${number.sqrt(2)}")
 
 try {
-    @bad_sqrt = number.sqrt(math.sub(0, 1))
+    @bad_sqrt = number.sqrt(0 - 1)
 } fallback {
     sys.echo("sqrt(-1) raises an error (caught)")
 }

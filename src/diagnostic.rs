@@ -283,6 +283,13 @@ fn lint_expr(expr: &Expr, out: &mut Vec<LintDiagnostic>) {
                 lint_stmt(stmt, out);
             }
         }
+        Expr::Unary { operand, .. } => {
+            lint_expr(operand, out);
+        }
+        Expr::Binary { left, right, .. } => {
+            lint_expr(left, out);
+            lint_expr(right, out);
+        }
         Expr::Literal { .. }
         | Expr::VarGet { .. }
         | Expr::StaticGet { .. }

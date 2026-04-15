@@ -132,7 +132,7 @@ try {
   # "from_end" means "all but last N" — equivalent to head -n -N
   try {
     assert_eq(@from_end, true)
-    @_end = math.sub(@_total, @count)
+    @_end = @_total - @count
     try {
       assert_lt(@_end, 0)
       @_end = 0
@@ -157,7 +157,7 @@ try {
 
   try {
     assert_eq(@from_end, true)
-    @_take = math.sub(@_total, @count)
+    @_take = @_total - @count
     try {
       assert_lt(@_take, 0)
       @_take = 0
@@ -269,7 +269,7 @@ try {
         @_lines = string.split(@_content, "\n")
         try {
           assert_eq(string.is_empty(list.last(@_lines)), true)
-          @_lines = list.slice(@_lines, 0, math.sub(list.len(@_lines), 1))
+          @_lines = list.slice(@_lines, 0, list.len(@_lines) - 1)
         } fallback {}
         @_head_lines.call(@_lines, @_n_lines, @_from_end_lines)
       }
@@ -302,7 +302,7 @@ try {
           @_lines = string.split(@_content, "\n")
           try {
             assert_eq(string.is_empty(list.last(@_lines)), true)
-            @_lines = list.slice(@_lines, 0, math.sub(list.len(@_lines), 1))
+            @_lines = list.slice(@_lines, 0, list.len(@_lines) - 1)
           } fallback {}
           @_head_lines.call(@_lines, @_n_lines, @_from_end_lines)
         }

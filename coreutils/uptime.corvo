@@ -74,11 +74,11 @@ try {
 
 # -- Procedure: format uptime duration in pretty format ------------------------
 @_format_pretty = procedure(@secs, @result_out) {
-  @_days = number.floor(math.div(@secs, 86400))
+  @_days = number.floor(@secs / 86400)
   @_rem = math.mod(@secs, 86400)
-  @_hours = number.floor(math.div(@_rem, 3600))
+  @_hours = number.floor(@_rem / 3600)
   @_rem = math.mod(@_rem, 3600)
-  @_mins = number.floor(math.div(@_rem, 60))
+  @_mins = number.floor(@_rem / 60)
 
   @_parts = list.new()
 
@@ -122,11 +122,11 @@ try {
 
 # -- Procedure: format uptime duration in short format (for default output) ----
 @_format_short = procedure(@secs, @result_out) {
-  @_days = number.floor(math.div(@secs, 86400))
+  @_days = number.floor(@secs / 86400)
   @_rem = math.mod(@secs, 86400)
-  @_hours = number.floor(math.div(@_rem, 3600))
+  @_hours = number.floor(@_rem / 3600)
   @_rem = math.mod(@_rem, 3600)
-  @_mins = number.floor(math.div(@_rem, 60))
+  @_mins = number.floor(@_rem / 60)
 
   try {
     assert_gt(@_days, 0)
@@ -200,11 +200,11 @@ try {
       @_format_load = procedure(@load_val, @load_out) {
         @_str = number.to_string(@load_val)
         @_dot_idx = string.index_of(@_str, ".", 0)
-        @_neg1 = math.sub(0, 1)
+        @_neg1 = -1
         try {
           # Check if dot exists (idx != -1)
           assert_neq(@_dot_idx, @_neg1)
-          @_end = math.add(@_dot_idx, 3)
+          @_end = @_dot_idx + 3
           try {
             assert_gt(@_end, string.len(@_str))
             @load_out = @_str

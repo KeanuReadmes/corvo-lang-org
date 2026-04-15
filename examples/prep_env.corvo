@@ -82,7 +82,7 @@ sys.echo("")
 sys.echo("Max retries baked in: ${@max}")
 @attempt = 0
 loop {
-    @attempt = math.add(@attempt, 1)
+    @attempt += 1
     sys.echo("Attempt ${@attempt} of ${@max}")
     try {
         assert_eq(@attempt, @max)

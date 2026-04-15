@@ -1,4 +1,6 @@
-use crate::ast::{AssertKind, Expr, FallbackBlock, MatchArm, MatchPattern, Program, Stmt};
+use crate::ast::{
+    AssertKind, BinaryOp, Expr, FallbackBlock, MatchArm, MatchPattern, Program, Stmt, UnaryOp,
+};
 use crate::lexer::token::{Token, TokenType};
 use crate::type_system::Value;
 use crate::{CorvoError, CorvoResult};
@@ -17,6 +19,59 @@ impl Parser {
             current: 0,
             in_prep_block: false,
         }
+    }
+
+    /// Tokens that may follow `@` as a variable name (`var` is a keyword but `@var` is allowed).
+    fn is_at_variable_name(token_type: &TokenType) -> bool {
+        matches!(
+            token_type,
+            TokenType::Identifier(_)
+                | TokenType::Var
+                | TokenType::Static
+                | TokenType::Prep
+                | TokenType::Try
+                | TokenType::Fallback
+                | TokenType::Loop
+                | TokenType::Browse
+                | TokenType::AsyncBrowse
+                | TokenType::Terminate
+                | TokenType::DontPanic
+                | TokenType::Match
+                | TokenType::AssertEq
+                | TokenType::AssertNeq
+                | TokenType::AssertGt
+                | TokenType::AssertLt
+                | TokenType::AssertMatch
+                | TokenType::Procedure
+                | TokenType::Shared
+        )
+    }
+
+    fn parse_name_after_at(&mut self) -> CorvoResult<String> {
+        let name = match &self.peek().token_type {
+            TokenType::Identifier(s) => s.clone(),
+            TokenType::Var => "var".to_string(),
+            TokenType::Static => "static".to_string(),
+            TokenType::Prep => "prep".to_string(),
+            TokenType::Try => "try".to_string(),
+            TokenType::Fallback => "fallback".to_string(),
+            TokenType::Loop => "loop".to_string(),
+            TokenType::Browse => "browse".to_string(),
+            TokenType::AsyncBrowse => "async_browse".to_string(),
+            TokenType::Terminate => "terminate".to_string(),
+            TokenType::DontPanic => "dont_panic".to_string(),
+            TokenType::Match => "match".to_string(),
+            TokenType::AssertEq => "assert_eq".to_string(),
+            TokenType::AssertNeq => "assert_neq".to_string(),
+            TokenType::AssertGt => "assert_gt".to_string(),
+            TokenType::AssertLt => "assert_lt".to_string(),
+            TokenType::AssertMatch => "assert_match".to_string(),
+            TokenType::Procedure => "procedure".to_string(),
+            TokenType::Shared => "shared".to_string(),
+            _ => return Err(self.error("Expected variable name after '@'")),
+        };
+        self.advance();
+        Ok(name)
     }
 
     pub fn parse(&mut self) -> CorvoResult<Program> {
@@ -78,41 +133,41 @@ impl Parser {
                 // @name += expr       → VarAddAssign shortcut
                 // @name -= expr       → VarSubAssign shortcut
                 // @name               → ExprStmt (VarGet shortcut)
-                let next_is_ident = matches!(
+                let next_is_at_var_name = matches!(
                     self.tokens.get(self.current + 1).map(|t| &t.token_type),
-                    Some(TokenType::Identifier(_))
+                    Some(tt) if Self::is_at_variable_name(tt)
                 );
-                let is_simple_assignment = next_is_ident
+                let is_simple_assignment = next_is_at_var_name
                     && matches!(
                         self.tokens.get(self.current + 2).map(|t| &t.token_type),
                         Some(TokenType::Equals)
                     );
-                let is_index_assignment = next_is_ident
+                let is_index_assignment = next_is_at_var_name
                     && matches!(
                         self.tokens.get(self.current + 2).map(|t| &t.token_type),
                         Some(TokenType::LeftBracket)
                     );
-                let is_increment = next_is_ident
+                let is_increment = next_is_at_var_name
                     && matches!(
                         self.tokens.get(self.current + 2).map(|t| &t.token_type),
                         Some(TokenType::Increment)
                     );
-                let is_decrement = next_is_ident
+                let is_decrement = next_is_at_var_name
                     && matches!(
                         self.tokens.get(self.current + 2).map(|t| &t.token_type),
                         Some(TokenType::Decrement)
                     );
-                let is_add_assign = next_is_ident
+                let is_add_assign = next_is_at_var_name
                     && matches!(
                         self.tokens.get(self.current + 2).map(|t| &t.token_type),
                         Some(TokenType::PlusEqual)
                     );
-                let is_sub_assign = next_is_ident
+                let is_sub_assign = next_is_at_var_name
                     && matches!(
                         self.tokens.get(self.current + 2).map(|t| &t.token_type),
                         Some(TokenType::MinusEqual)
                     );
-                let is_or_assign = next_is_ident
+                let is_or_assign = next_is_at_var_name
                     && matches!(
                         self.tokens.get(self.current + 2).map(|t| &t.token_type),
                         Some(TokenType::OrEqual)
@@ -235,11 +290,7 @@ impl Parser {
             TokenType::At,
             "Expected '@' before key variable name in browse",
         )?;
-        let key = match &self.peek().token_type {
-            TokenType::Identifier(s) => s.clone(),
-            _ => return Err(self.error("Expected identifier for key variable name after '@'")),
-        };
-        self.advance(); // consume key identifier
+        let key = self.parse_name_after_at()?;
 
         self.consume(TokenType::Comma, "Expected ',' after key name")?;
 
@@ -247,11 +298,7 @@ impl Parser {
             TokenType::At,
             "Expected '@' before value variable name in browse",
         )?;
-        let value = match &self.peek().token_type {
-            TokenType::Identifier(s) => s.clone(),
-            _ => return Err(self.error("Expected identifier for value variable name after '@'")),
-        };
-        self.advance(); // consume value identifier
+        let value = self.parse_name_after_at()?;
 
         self.consume(TokenType::RightParen, "Expected ')' after value name")?;
         self.consume(TokenType::LeftBrace, "Expected '{' after ')'")?;
@@ -284,13 +331,7 @@ impl Parser {
             TokenType::At,
             "Expected '@' before procedure variable name in async_browse",
         )?;
-        let proc_name = match &self.peek().token_type {
-            TokenType::Identifier(s) => s.clone(),
-            _ => {
-                return Err(self.error("Expected procedure variable name after '@' in async_browse"))
-            }
-        };
-        self.advance(); // consume identifier
+        let proc_name = self.parse_name_after_at()?;
         self.consume(TokenType::Comma, "Expected ',' after procedure variable")?;
 
         // Third argument: @item_param — per-item binding name
@@ -298,11 +339,7 @@ impl Parser {
             TokenType::At,
             "Expected '@' before item binding name in async_browse",
         )?;
-        let item_param = match &self.peek().token_type {
-            TokenType::Identifier(s) => s.clone(),
-            _ => return Err(self.error("Expected item binding name after '@' in async_browse")),
-        };
-        self.advance(); // consume identifier
+        let item_param = self.parse_name_after_at()?;
 
         // Remaining arguments: (,shared @varname)*
         let mut shared_vars = Vec::new();
@@ -315,15 +352,7 @@ impl Parser {
                 TokenType::At,
                 "Expected '@' before shared variable name in async_browse",
             )?;
-            let name = match &self.peek().token_type {
-                TokenType::Identifier(s) => s.clone(),
-                _ => {
-                    return Err(
-                        self.error("Expected shared variable name after '@' in async_browse")
-                    )
-                }
-            };
-            self.advance(); // consume identifier
+            let name = self.parse_name_after_at()?;
             shared_vars.push(name);
         }
 
@@ -349,11 +378,7 @@ impl Parser {
 
     fn parse_at_var_set(&mut self) -> CorvoResult<Stmt> {
         self.advance(); // consume '@'
-        let name = match &self.peek().token_type {
-            TokenType::Identifier(s) => s.clone(),
-            _ => return Err(self.error("Expected variable name after '@'")),
-        };
-        self.advance(); // consume identifier
+        let name = self.parse_name_after_at()?;
         self.consume(TokenType::Equals, "Expected '=' after variable name")?;
         let value = self.parse_expression()?;
         Ok(Stmt::VarSet { name, value })
@@ -361,11 +386,7 @@ impl Parser {
 
     fn parse_at_var_increment(&mut self) -> CorvoResult<Stmt> {
         self.advance(); // consume '@'
-        let name = match &self.peek().token_type {
-            TokenType::Identifier(s) => s.clone(),
-            _ => return Err(self.error("Expected variable name after '@'")),
-        };
-        self.advance(); // consume identifier
+        let name = self.parse_name_after_at()?;
         self.advance(); // consume '++'
         Ok(Stmt::VarAddAssign {
             name,
@@ -377,11 +398,7 @@ impl Parser {
 
     fn parse_at_var_decrement(&mut self) -> CorvoResult<Stmt> {
         self.advance(); // consume '@'
-        let name = match &self.peek().token_type {
-            TokenType::Identifier(s) => s.clone(),
-            _ => return Err(self.error("Expected variable name after '@'")),
-        };
-        self.advance(); // consume identifier
+        let name = self.parse_name_after_at()?;
         self.advance(); // consume '--'
         Ok(Stmt::VarSubAssign {
             name,
@@ -393,11 +410,7 @@ impl Parser {
 
     fn parse_at_var_add_assign(&mut self) -> CorvoResult<Stmt> {
         self.advance(); // consume '@'
-        let name = match &self.peek().token_type {
-            TokenType::Identifier(s) => s.clone(),
-            _ => return Err(self.error("Expected variable name after '@'")),
-        };
-        self.advance(); // consume identifier
+        let name = self.parse_name_after_at()?;
         self.advance(); // consume '+='
         let value = self.parse_expression()?;
         Ok(Stmt::VarAddAssign { name, value })
@@ -405,11 +418,7 @@ impl Parser {
 
     fn parse_at_var_sub_assign(&mut self) -> CorvoResult<Stmt> {
         self.advance(); // consume '@'
-        let name = match &self.peek().token_type {
-            TokenType::Identifier(s) => s.clone(),
-            _ => return Err(self.error("Expected variable name after '@'")),
-        };
-        self.advance(); // consume identifier
+        let name = self.parse_name_after_at()?;
         self.advance(); // consume '-='
         let value = self.parse_expression()?;
         Ok(Stmt::VarSubAssign { name, value })
@@ -417,11 +426,7 @@ impl Parser {
 
     fn parse_at_var_or_assign(&mut self) -> CorvoResult<Stmt> {
         self.advance(); // consume '@'
-        let name = match &self.peek().token_type {
-            TokenType::Identifier(s) => s.clone(),
-            _ => return Err(self.error("Expected variable name after '@'")),
-        };
-        self.advance(); // consume identifier
+        let name = self.parse_name_after_at()?;
         self.advance(); // consume 'or='
         self.consume(TokenType::LeftParen, "Expected '(' after 'or='")?;
         let mut candidates = Vec::new();
@@ -440,11 +445,7 @@ impl Parser {
 
     fn parse_at_index_set_or_expr(&mut self) -> CorvoResult<Stmt> {
         self.advance(); // consume '@'
-        let name = match &self.peek().token_type {
-            TokenType::Identifier(s) => s.clone(),
-            _ => return Err(self.error("Expected variable name after '@'")),
-        };
-        self.advance(); // consume identifier
+        let name = self.parse_name_after_at()?;
         self.consume(TokenType::LeftBracket, "Expected '[' after variable name")?;
 
         // Detect slice syntax: [:end] or [:]
@@ -551,6 +552,68 @@ impl Parser {
     // --- Expression Parsers ---
 
     fn parse_expression(&mut self) -> CorvoResult<Expr> {
+        self.parse_additive()
+    }
+
+    fn parse_additive(&mut self) -> CorvoResult<Expr> {
+        let mut expr = self.parse_multiplicative()?;
+        loop {
+            if self.match_token(TokenType::Plus) {
+                let rhs = self.parse_multiplicative()?;
+                expr = Expr::Binary {
+                    op: BinaryOp::Add,
+                    left: Box::new(expr),
+                    right: Box::new(rhs),
+                };
+            } else if self.match_token(TokenType::Minus) {
+                let rhs = self.parse_multiplicative()?;
+                expr = Expr::Binary {
+                    op: BinaryOp::Sub,
+                    left: Box::new(expr),
+                    right: Box::new(rhs),
+                };
+            } else {
+                break;
+            }
+        }
+        Ok(expr)
+    }
+
+    fn parse_multiplicative(&mut self) -> CorvoResult<Expr> {
+        let mut expr = self.parse_unary()?;
+        loop {
+            if self.match_token(TokenType::Star) {
+                let rhs = self.parse_unary()?;
+                expr = Expr::Binary {
+                    op: BinaryOp::Mul,
+                    left: Box::new(expr),
+                    right: Box::new(rhs),
+                };
+            } else if self.match_token(TokenType::Slash) {
+                let rhs = self.parse_unary()?;
+                expr = Expr::Binary {
+                    op: BinaryOp::Div,
+                    left: Box::new(expr),
+                    right: Box::new(rhs),
+                };
+            } else {
+                break;
+            }
+        }
+        Ok(expr)
+    }
+
+    fn parse_unary(&mut self) -> CorvoResult<Expr> {
+        if self.match_token(TokenType::Minus) {
+            let inner = self.parse_unary()?;
+            return Ok(Expr::Unary {
+                op: UnaryOp::Neg,
+                operand: Box::new(inner),
+            });
+        }
+        if self.match_token(TokenType::Plus) {
+            return self.parse_unary();
+        }
         let expr = self.parse_primary()?;
         self.parse_postfix(expr)
     }
@@ -682,16 +745,16 @@ impl Parser {
             }
             TokenType::LeftBracket => self.parse_list_literal(),
             TokenType::LeftBrace => self.parse_map_literal(),
+            TokenType::LeftParen => {
+                self.advance();
+                let inner = self.parse_expression()?;
+                self.consume(TokenType::RightParen, "Expected ')' after expression")?;
+                Ok(inner)
+            }
             TokenType::At => {
                 self.advance(); // consume '@'
-                match &self.peek().token_type {
-                    TokenType::Identifier(s) => {
-                        let name = s.clone();
-                        self.advance(); // consume identifier
-                        Ok(Expr::VarGet { name })
-                    }
-                    _ => Err(self.error("Expected variable name after '@'")),
-                }
+                let name = self.parse_name_after_at()?;
+                Ok(Expr::VarGet { name })
             }
             TokenType::Match => {
                 self.advance(); // consume 'match'
@@ -850,11 +913,7 @@ impl Parser {
         if !self.check(TokenType::RightParen) {
             loop {
                 self.consume(TokenType::At, "Expected '@' before parameter name")?;
-                let name = match &self.peek().token_type {
-                    TokenType::Identifier(s) => s.clone(),
-                    _ => return Err(self.error("Expected parameter name after '@'")),
-                };
-                self.advance();
+                let name = self.parse_name_after_at()?;
                 params.push(name);
                 if !self.match_token(TokenType::Comma) {
                     break;

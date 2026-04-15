@@ -62,6 +62,51 @@ fn test_variable_arithmetic() {
 }
 
 #[test]
+fn test_infix_arithmetic_with_at_vars() {
+    let state = run_with_state(
+        r#"
+        @random_number = 5
+        @var = 1 + 1 + ((2 * 2) / 2) + @random_number
+        "#,
+    )
+    .unwrap();
+    assert_eq!(
+        state.var_get("var").unwrap(),
+        corvo_lang::type_system::Value::Number(9.0)
+    );
+}
+
+#[test]
+fn test_infix_precedence_and_unary_minus() {
+    let state = run_with_state(
+        r#"
+        @a = 1 + 2 * 3
+        @b = (1 + 2) * 3
+        @c = -5 + 2
+        "#,
+    )
+    .unwrap();
+    assert_eq!(
+        state.var_get("a").unwrap(),
+        corvo_lang::type_system::Value::Number(7.0)
+    );
+    assert_eq!(
+        state.var_get("b").unwrap(),
+        corvo_lang::type_system::Value::Number(9.0)
+    );
+    assert_eq!(
+        state.var_get("c").unwrap(),
+        corvo_lang::type_system::Value::Number(-3.0)
+    );
+}
+
+#[test]
+fn test_string_interpolation_infix_arithmetic() {
+    let state = run_with_state(r#"sys.echo("${1 + 2 * 3}")"#).unwrap();
+    assert!(state.is_empty());
+}
+
+#[test]
 fn test_math_max() {
     let state = run_with_state(
         r#"

@@ -27,7 +27,7 @@
 @doubled = list.new()
 
 @do_double = procedure(@n, @acc) {
-    @result = math.mul(@n, 2)
+    @result = @n * 2
     @acc = list.push(@acc, @result)
 }
 

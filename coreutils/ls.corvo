@@ -136,12 +136,12 @@
 @print_total_blocks = procedure(@sorted_list, @human_flag) {
   @_tb = 0
   browse(@sorted_list, @_ptb, @_pee) {
-    @_tb = math.add(@_tb, @_pee.get("blocks", 0))
+    @_tb += @_pee.get("blocks", 0)
   }
-  @_tk = number.ceil(math.div(@_tb, 2))
+  @_tk = number.ceil(@_tb / 2)
   try {
     assert_eq(@human_flag, true)
-    sys.echo("total ${math.human_bytes(math.mul(@_tk, 1024), false)}")
+    sys.echo("total ${math.human_bytes(@_tk * 1024, false)}")
   } fallback {
     sys.echo("total ${@_tk}")
   }
@@ -157,7 +157,7 @@
   try {
     assert_eq(list.len(@_parts), 1)
   } fallback {
-    @_ext = list.get(@_parts, math.sub(list.len(@_parts), 1))
+    @_ext = list.get(@_parts, list.len(@_parts) - 1)
   }
   @_ee2 = @ee
   @_ee2["extension"] = @_ext
@@ -691,7 +691,7 @@ loop {
     assert_eq(@blocks, true)
     browse(@sorted, @_bx, @ee) {
       @bw = @ee.get("blocks", 0)
-      @bsw = number.to_string(number.floor(math.div(@bw, 2)))
+      @bsw = number.to_string(number.floor(@bw / 2))
       @max_blk_s = math.max(@max_blk_s, string.len(@bsw))
     }
   } fallback {}
@@ -721,7 +721,7 @@ loop {
       try {
         assert_eq(@blocks, true)
         @bw = @ee.get("blocks", 0)
-        @bsw = number.to_string(number.floor(math.div(@bw, 2)))
+        @bsw = number.to_string(number.floor(@bw / 2))
         @max_blk = math.max(@max_blk, string.len(@bsw))
       } fallback {}
 
@@ -851,7 +851,7 @@ loop {
             try {
               assert_eq(@blocks, true)
               @b = @ee.get("blocks", 0)
-              @bb = number.to_string(number.floor(math.div(@b, 2)))
+              @bb = number.to_string(number.floor(@b / 2))
               @pre_ln = string.pad_start(@bb, @max_blk_s, " ")
               @pre_ln += " "
             } fallback {}
@@ -877,7 +877,7 @@ loop {
             try {
               assert_eq(@blocks, true)
               @b = @ee.get("blocks", 0)
-              @bb = number.to_string(number.floor(math.div(@b, 2)))
+              @bb = number.to_string(number.floor(@b / 2))
               @blk_s = string.pad_start(@bb, @max_blk, " ")
               @blk_s += " "
             } fallback {}

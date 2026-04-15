@@ -18,7 +18,7 @@
 
 @skip_main = false
 @exit_code = 0
-@neg_one = math.sub(0, 1)
+@neg_one = -1
 
 try {
   assert_eq(@o.get("help", false), true)
@@ -168,7 +168,7 @@ try {
         }
       } fallback {
         @u = string.substring(@owner_spec, 0, @colon)
-        @g = string.substring(@owner_spec, math.add(@colon, 1), string.len(@owner_spec))
+        @g = string.substring(@owner_spec, @colon + 1, string.len(@owner_spec))
         try {
           assert_eq(string.is_empty(@u), false)
           try {

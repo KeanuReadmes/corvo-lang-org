@@ -127,7 +127,7 @@ try {
         @_trimmed = string.trim(@_part)
         try {
           assert_eq(string.is_empty(@_trimmed), false)
-          @_word_count = math.add(@_word_count, 1)
+          @_word_count += 1
         } fallback {}
       }
     }
@@ -158,23 +158,23 @@ try {
   @nprint = 0
   try {
     assert_eq(@show_l, true)
-    @nprint = math.add(@nprint, 1)
+    @nprint += 1
   } fallback {}
   try {
     assert_eq(@show_w, true)
-    @nprint = math.add(@nprint, 1)
+    @nprint += 1
   } fallback {}
   try {
     assert_eq(@show_c, true)
-    @nprint = math.add(@nprint, 1)
+    @nprint += 1
   } fallback {}
   try {
     assert_eq(@show_b, true)
-    @nprint = math.add(@nprint, 1)
+    @nprint += 1
   } fallback {}
   try {
     assert_eq(@show_L, true)
-    @nprint = math.add(@nprint, 1)
+    @nprint += 1
   } fallback {}
 
   @paths = @argv_files
@@ -203,7 +203,7 @@ try {
           assert_eq(map.get(@st, "is_dir", false), true)
           @min_w = 7
         } fallback {
-          @reg_total = math.add(@reg_total, map.get(@st, "size", 0))
+          @reg_total += map.get(@st, "size", 0)
         }
       } fallback {}
     }
@@ -214,8 +214,8 @@ try {
         assert_lt(@rt, 10)
         terminate
       } fallback {}
-      @nw_out = math.add(@nw_out, 1)
-      @rt = number.floor(math.div(@rt, 10))
+      @nw_out += 1
+      @rt = number.floor(@rt / 10)
     }
     try {
       assert_lt(@nw_out, @min_w)
@@ -410,15 +410,15 @@ try {
         @_count_stats.call(@_content, @_stats)
 
         # Accumulate totals
-        @_total_lines = math.add(@_total_lines, @_stats["lines"])
-        @_total_words = math.add(@_total_words, @_stats["words"])
-        @_total_chars = math.add(@_total_chars, @_stats["chars"])
-        @_total_bytes = math.add(@_total_bytes, @_stats["bytes"])
+        @_total_lines += @_stats["lines"]
+        @_total_words += @_stats["words"]
+        @_total_chars += @_stats["chars"]
+        @_total_bytes += @_stats["bytes"]
         try {
           assert_gt(@_stats["max_len"], @_total_max_len)
           @_total_max_len = @_stats["max_len"]
         } fallback {}
-        @_file_count = math.add(@_file_count, 1)
+        @_file_count += 1
 
         @_display_name = @_fname
         try {

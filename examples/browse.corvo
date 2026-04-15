@@ -9,7 +9,7 @@ sys.echo("Language: ${@language}")
 
 # Param names must differ from outer vars (here @total) so copy-back is not clobbered.
 @add_price = procedure(@acc, @delta) {
-    @acc = math.add(@acc, @delta)
+    @acc += @delta
 }
 
 # --- browse over a list ---

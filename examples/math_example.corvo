@@ -1,34 +1,35 @@
-# math_example.corvo - All math.* functions
+# math_example.corvo - Infix arithmetic (+ - * /) and math.mod (no `%` yet)
+
+@section.call("=== infix + - * / (numbers) ===")
+@random_number = 5
+@infix = 1 + 1 + ((2 * 2) / 2) + @random_number
+sys.echo("1 + 1 + ((2 * 2) / 2) + 5 = ${@infix}")
+assert_eq(@infix, 9)
 
 @section = procedure(@title) {
     sys.echo("")
     sys.echo(@title)
 }
 
-sys.echo("=== math.add ===")
-@sum = math.add(10, 5)
+@section.call("=== addition (+) ===")
+@sum = 10 + 5
 sys.echo("10 + 5 = ${@sum}")
 
-@section.call("=== math.sub ===")
-@diff = math.sub(10, 5)
+@section.call("=== subtraction (-) ===")
+@diff = 10 - 5
 sys.echo("10 - 5 = ${@diff}")
 
-@section.call("=== math.mul ===")
-@product = math.mul(10, 5)
+@section.call("=== multiplication (*) ===")
+@product = 10 * 5
 sys.echo("10 * 5 = ${@product}")
 
-@section.call("=== math.div ===")
-@quotient = math.div(10, 5)
+@section.call("=== division (/) ===")
+@quotient = 10 / 5
 sys.echo("10 / 5 = ${@quotient}")
 
-# Division by zero is caught by fallback
-try {
-    @bad = math.div(10, 0)
-} fallback {
-    sys.echo("math.div by zero raises an error (caught by fallback)")
-}
+# Infix `/` uses IEEE 754 floats (e.g. 10 / 0 is infinity, no error). Use math.div only when you need a runtime error on division by zero.
 
-@section.call("=== math.mod ===")
+@section.call("=== math.mod (no % operator yet) ===")
 @remainder = math.mod(10, 3)
 sys.echo("10 mod 3 = ${@remainder}")
 

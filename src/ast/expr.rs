@@ -14,6 +14,19 @@ pub struct MatchArm {
     pub body: Box<Expr>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnaryOp {
+    Neg,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BinaryOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Literal {
@@ -58,6 +71,15 @@ pub enum Expr {
     },
     SharedArg {
         name: String,
+    },
+    Unary {
+        op: UnaryOp,
+        operand: Box<Expr>,
+    },
+    Binary {
+        op: BinaryOp,
+        left: Box<Expr>,
+        right: Box<Expr>,
     },
 }
 

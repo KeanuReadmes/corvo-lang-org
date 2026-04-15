@@ -58,7 +58,7 @@ try {
   @_is_s = number.to_string(@_is_num)
   try {
     assert_eq(string.ends_with(@_is_s, ".0"), true)
-    @_is_s = string.substring(@_is_s, 0, math.sub(string.len(@_is_s), 2))
+    @_is_s = string.substring(@_is_s, 0, string.len(@_is_s) - 2)
   } fallback {}
 }
 

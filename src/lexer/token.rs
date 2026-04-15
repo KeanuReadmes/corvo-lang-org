@@ -48,6 +48,10 @@ pub enum TokenType {
     OrEqual,
     Increment,
     Decrement,
+    Plus,
+    Minus,
+    Star,
+    Slash,
 
     // Special
     StringInterpolation(Vec<Token>),
@@ -105,6 +109,10 @@ impl fmt::Display for TokenType {
             Self::OrEqual => write!(f, "or="),
             Self::Increment => write!(f, "++"),
             Self::Decrement => write!(f, "--"),
+            Self::Plus => write!(f, "+"),
+            Self::Minus => write!(f, "-"),
+            Self::Star => write!(f, "*"),
+            Self::Slash => write!(f, "/"),
             Self::StringInterpolation(_) => write!(f, "string(...)"),
             Self::Comment(text) => write!(f, "#{}", text),
             Self::Eof => write!(f, "EOF"),

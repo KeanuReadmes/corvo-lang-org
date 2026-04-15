@@ -62,7 +62,7 @@
     # Trailing slash: use the second-to-last component instead.
     try {
       assert_gt(list.len(@_parts), 1)
-      @_sname = list.get(@_parts, math.sub(list.len(@_parts), 2))
+      @_sname = list.get(@_parts, list.len(@_parts) - 2)
     } fallback {
       @_sname = @_src
     }
@@ -186,8 +186,8 @@ try {
     } fallback {}
     try {
       assert_eq(@skip_main, false)
-      @dest = list.get(@srcs, math.sub(list.len(@srcs), 1))
-      @srcs = list.slice(@srcs, 0, math.sub(list.len(@srcs), 1))
+      @dest = list.get(@srcs, list.len(@srcs) - 1)
+      @srcs = list.slice(@srcs, 0, list.len(@srcs) - 1)
     } fallback {}
   } fallback {
     # -t flag: all positionals are sources; dest is the target directory.

@@ -139,13 +139,13 @@ try {
 # ── Procedure: print the last N lines of a list ───────────────────────────────
 @_tail_lines = procedure(@lines, @count, @from_start) {
   @_total = list.len(@lines)
-  @_start = math.sub(@_total, @count)
+  @_start = @_total - @count
   @_end   = @_total
 
   # '+N' means start from line N (1-based)
   try {
     assert_eq(@from_start, true)
-    @_start = math.sub(@count, 1)
+    @_start = @count - 1
     # Clamp to valid range
     try {
       assert_lt(@_start, 0)
@@ -174,13 +174,13 @@ try {
   try {
     assert_eq(@from_start, true)
     # 1-based: start from byte @count
-    @_start = math.sub(@count, 1)
+    @_start = @count - 1
     try {
       assert_lt(@_start, 0)
       @_start = 0
     } fallback {}
   } fallback {
-    @_start = math.sub(@_total, @count)
+    @_start = @_total - @count
     try {
       assert_lt(@_start, 0)
       @_start = 0
@@ -280,7 +280,7 @@ try {
         @_lines = string.split(@_content, "\n")
         try {
           assert_eq(string.is_empty(list.last(@_lines)), true)
-          @_lines = list.slice(@_lines, 0, math.sub(list.len(@_lines), 1))
+          @_lines = list.slice(@_lines, 0, list.len(@_lines) - 1)
         } fallback {}
         @_tail_lines.call(@_lines, @_n_lines, @_from_start_lines)
       }
@@ -313,7 +313,7 @@ try {
           @_lines = string.split(@_content, "\n")
           try {
             assert_eq(string.is_empty(list.last(@_lines)), true)
-            @_lines = list.slice(@_lines, 0, math.sub(list.len(@_lines), 1))
+            @_lines = list.slice(@_lines, 0, list.len(@_lines) - 1)
           } fallback {}
           @_tail_lines.call(@_lines, @_n_lines, @_from_start_lines)
         }
