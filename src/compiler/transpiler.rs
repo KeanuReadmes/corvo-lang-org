@@ -676,13 +676,20 @@ impl Transpiler {
             Expr::Match { value, arms } => {
                 let val_code = self.transpile_expr(value, state_var);
                 let mut arms_code = Vec::new();
+                let mut has_wildcard = false;
                 for arm in arms {
                     let pat = match &arm.pattern {
-                        MatchPattern::Literal(v) => self.value_to_rust_literal(v),
-                        MatchPattern::Wildcard => "_".to_string(),
-                        MatchPattern::Regex(p, f) => {
-                            format!("Value::Regex({:?}.to_string(), {:?}.to_string())", p, f)
+                        MatchPattern::Literal(v) => {
+                            format!("__corvo_match_val if __corvo_match_val == {}", self.value_to_rust_literal(v))
                         }
+                        MatchPattern::Wildcard => {
+                            has_wildcard = true;
+                            "_".to_string()
+                        }
+                        MatchPattern::Regex(p, f) => format!(
+                            "__corvo_match_val if __corvo_match_val == Value::Regex({:?}.to_string(), {:?}.to_string())",
+                            p, f
+                        ),
                     };
                     arms_code.push(format!(
                         "{} => {},",
@@ -690,16 +697,16 @@ impl Transpiler {
                         self.transpile_expr(&arm.body, state_var)
                     ));
                 }
-                format!(
-                    "match {} {{ {} _ => Value::Null }}",
-                    val_code,
-                    arms_code.join(" ")
-                )
+                if has_wildcard {
+                    format!("match {} {{ {} }}", val_code, arms_code.join(" "))
+                } else {
+                    format!("match {} {{ {} _ => Value::Null }}", val_code, arms_code.join(" "))
+                }
             }
             Expr::IndexAccess { target, index } => {
                 let t = self.transpile_expr(target, state_var);
                 let i = self.transpile_expr(index, state_var);
-                format!("match ({}, {}) {{\n    (Value::List(l), Value::Number(idx)) => l.get(*idx as usize).cloned().ok_or_else(|| CorvoError::runtime(\"Index out of bounds\"))?,\n    (Value::Map(m), Value::String(key)) => m.get(&key).cloned().ok_or_else(|| CorvoError::runtime(format!(\"Key not found: {{}}\", key)))?,\n    _ => return Err(CorvoError::r#type(\"index access error\"))\n}}", t, i)
+                format!("match ({}, {}) {{\n    (Value::List(l), Value::Number(idx)) => l.get(idx as usize).cloned().ok_or_else(|| CorvoError::runtime(\"Index out of bounds\"))?,\n    (Value::Map(m), Value::String(key)) => m.get(&key).cloned().ok_or_else(|| CorvoError::runtime(format!(\"Key not found: {{}}\", key)))?,\n    _ => return Err(CorvoError::r#type(\"index access error\"))\n}}", t, i)
             }
             Expr::SliceAccess { target, start, end } => {
                 let t = self.transpile_expr(target, state_var);
