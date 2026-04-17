@@ -82,23 +82,38 @@ impl Transpiler {
         match stmt {
             Stmt::VarSet { name, value } => {
                 let val_expr = self.transpile_expr(value, state_var);
+                // Compute RHS into a temp first so that the borrow of `state`
+                // inside `val_expr` ends before `var_set` mutably borrows it.
+                code.push_str(&format!("{}{{\n", self.indent()));
                 code.push_str(&format!(
-                    "{}{}.var_set(\"{}\".to_string(), {});\n",
+                    "{}    let __corvo_rhs = {};\n",
                     self.indent(),
-                    state_var,
-                    name,
                     val_expr
                 ));
+                code.push_str(&format!(
+                    "{}    {}.var_set(\"{}\".to_string(), __corvo_rhs);\n",
+                    self.indent(),
+                    state_var,
+                    name
+                ));
+                code.push_str(&format!("{}}}\n", self.indent()));
             }
             Stmt::StaticSet { name, value } => {
                 let val_expr = self.transpile_expr(value, state_var);
+                // Same temp-variable pattern as VarSet to avoid double borrow.
+                code.push_str(&format!("{}{{\n", self.indent()));
                 code.push_str(&format!(
-                    "{}{}.static_set(\"{}\".to_string(), {});\n",
+                    "{}    let __corvo_rhs = {};\n",
                     self.indent(),
-                    state_var,
-                    name,
                     val_expr
                 ));
+                code.push_str(&format!(
+                    "{}    {}.static_set(\"{}\".to_string(), __corvo_rhs);\n",
+                    self.indent(),
+                    state_var,
+                    name
+                ));
+                code.push_str(&format!("{}}}\n", self.indent()));
             }
             Stmt::VarIndexSet { name, index, value } => {
                 let idx_expr = self.transpile_expr(index, state_var);
@@ -241,31 +256,34 @@ impl Transpiler {
             Stmt::VarOrAssign { name, candidates } => {
                 code.push_str(&format!("{}{{\n", self.indent()));
                 code.push_str(&format!(
-                    "{}    let mut current = {}.var_get(\"{}\").unwrap_or(Value::Null);\n",
+                    "{}    if !{}.var_get(\"{}\").unwrap_or(Value::Null).is_truthy() {{\n",
                     self.indent(),
                     state_var,
                     name
                 ));
-                code.push_str(&format!(
-                    "{}    if !current.is_truthy() {{\n",
-                    self.indent()
-                ));
-                self.indent_level += 2;
+                // Use a labeled block so that we can `break '__corvo_or` to stop
+                // trying further candidates once one is truthy.  A plain `break`
+                // is not valid outside a loop, and a loop-based approach cannot
+                // be broken from inside closures (e.g. inside TryBlock fallbacks).
+                // `break 'label` for a label defined inside the same closure IS
+                // always valid in Rust.
+                code.push_str(&format!("{}        '__corvo_or: {{\n", self.indent()));
+                self.indent_level += 3;
                 for cand in candidates {
                     let cand_expr = self.transpile_expr(cand, state_var);
-                    code.push_str(&format!("{}let val = {};\n", self.indent(), cand_expr));
-                    code.push_str(&format!("{}if val.is_truthy() {{\n", self.indent()));
+                    code.push_str(&format!("{}let __val = {};\n", self.indent(), cand_expr));
+                    code.push_str(&format!("{}if __val.is_truthy() {{\n", self.indent()));
                     code.push_str(&format!(
-                        "{}    {}.var_set(\"{}\".to_string(), val);\n",
+                        "{}    {}.var_set(\"{}\".to_string(), __val);\n",
                         self.indent(),
                         state_var,
                         name
                     ));
-                    code.push_str(&format!("{}    current = val;\n", self.indent()));
-                    code.push_str(&format!("{}    break;\n", self.indent()));
+                    code.push_str(&format!("{}    break '__corvo_or;\n", self.indent()));
                     code.push_str(&format!("{}}}\n", self.indent()));
                 }
-                self.indent_level -= 2;
+                self.indent_level -= 3;
+                code.push_str(&format!("{}        }}\n", self.indent()));
                 code.push_str(&format!("{}    }}\n", self.indent()));
                 code.push_str(&format!("{}}}\n", self.indent()));
             }
