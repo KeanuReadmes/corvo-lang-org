@@ -5,6 +5,10 @@ use std::collections::HashMap;
 pub struct Transpiler {
     pub indent_level: usize,
     pub captured_statics: HashMap<String, Value>,
+    /// When `true` the state variable is already a `&mut RuntimeState`
+    /// (e.g. inside a procedure callback closure) and must be passed
+    /// directly to native procedure calls rather than as `&mut state`.
+    pub state_is_ref: bool,
 }
 
 impl Transpiler {
@@ -18,6 +22,7 @@ impl Default for Transpiler {
         Self {
             indent_level: 1,
             captured_statics: HashMap::new(),
+            state_is_ref: false,
         }
     }
 }
@@ -641,6 +646,16 @@ impl Transpiler {
                 }
                 let outer_names_list = outer_names_code.join(", ");
 
+                // When `state_var` is already a `&mut RuntimeState` reference
+                // (inside a procedure callback closure) pass it directly to the
+                // native callback.  In the outer `run()` function `state` is a
+                // plain `RuntimeState` value and must be taken by `&mut`.
+                let state_arg = if self.state_is_ref {
+                    state_var.to_string()
+                } else {
+                    format!("&mut {}", state_var)
+                };
+
                 format!(
                     "{{\n    \
                     let t = {};\n    \
@@ -649,7 +664,7 @@ impl Transpiler {
                             let arg_vals = vec![{}];\n            \
                             let outer_names: Vec<Option<String>> = vec![{}];\n            \
                             let saved: Vec<Option<Value>> = p_names.iter().map(|p| {}.var_remove(p)).collect();\n            \
-                            let res = (p)(&arg_vals, &mut {})?;\n            \
+                            let res = (p)(&arg_vals, {})?;\n            \
                             for (i, param) in p_names.iter().enumerate() {{\n                \
                                 if let Some(Some(outer_name)) = outer_names.get(i) {{\n                    \
                                     let updated = {}.var_get(param.as_str()).unwrap_or(Value::Null);\n                    \
@@ -680,7 +695,7 @@ impl Transpiler {
                     args_list.join(", "),
                     outer_names_list,
                     state_var,
-                    state_var,
+                    state_arg,
                     state_var,
                     state_var,
                     state_var,
@@ -718,7 +733,11 @@ impl Transpiler {
                 if has_wildcard {
                     format!("match {} {{ {} }}", val_code, arms_code.join(" "))
                 } else {
-                    format!("match {} {{ {} _ => Value::Null }}", val_code, arms_code.join(" "))
+                    format!(
+                        "match {} {{ {} _ => Value::Null }}",
+                        val_code,
+                        arms_code.join(" ")
+                    )
                 }
             }
             Expr::IndexAccess { target, index } => {
@@ -769,9 +788,12 @@ impl Transpiler {
                 }
 
                 // Transpile body
+                // `state_is_ref: true` because the closure parameter is
+                // `state: &mut RuntimeState` (already a reference).
                 let mut sub_transpiler = Transpiler {
                     indent_level: 1,
                     captured_statics: self.captured_statics.clone(),
+                    state_is_ref: true,
                 };
                 for stmt in body {
                     proc_code.push_str(&sub_transpiler.transpile_stmt(stmt, "state"));
